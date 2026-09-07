@@ -568,6 +568,25 @@ private fun ArchitectCopyrightCard(
                 color = ZincMuted
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Obsidian Micro-Pill Badge: OTA Engine Active • Verified
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = ZincSurface,
+                border = BorderStroke(1.dp, SlateBorders),
+                modifier = Modifier.testTag("about_ota_engine_badge")
+            ) {
+                Text(
+                    text = "OTA Engine Active • Verified",
+                    color = CrispWhite,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.5.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             HorizontalDivider(
