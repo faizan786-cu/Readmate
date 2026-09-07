@@ -28,32 +28,24 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Restore Permanent Keystore and Google Services
+      - name: Setup Static Keystore and Google Services
         run: |
-          # Write permanent fixed keystore via static base64 string
-          # Is se har single build hamesha identical signature produce karegi
-          cat << 'EOF' | base64 -d > debug.keystore
-          /u3+7QAAAAIAAAABAAAAAQALZGVidWcta2V5AAAAAZZpQzMAAAFxMIIBbTCCARmgAwIBAgIEW41i
-          pTANBgkqhkiG9w0BAQsFADARMQ8wDQYDVQQDEwZkZWJ1ZzAwHhcNMjYwMTAxMDAwMDAwWhcNNDYw
-          MTAxMDAwMDAwWjARMQ8wDQYDVQQDEwZkZWJ1ZzAwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
-          AoIBAQC/GkF7M9Pq0vY8b9r1tGvT3w1XkZ8e8s1g4p7s9q2r5t8u2v5w1x2y4z7a3b4c5d6e7f8g
-          9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s
-          7t8u9v0w1x2y3z4a5b6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2c3d4e
-          5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q
-          AgMBAAEwDQYJKoZIhvcNAQELBQADggEBAANd/jV2f4k5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1
-          b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m
-          9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y
-          7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0g1h2i3j4k
-          5l6m7n8o9p0q1r2s3t4u5v6w7x8y9z0a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w
-          EOF
+          # 1. Standard Android SDK debug key create karein with deterministic inputs
+          mkdir -p ~/.android
+          keytool -genkeypair -v \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
+            -keypass android \
+            -storepass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
 
-          # Standard keystore generate karna agar base64 decode fallback chahiye ho
-          if [ ! -s debug.keystore ]; then
-            keytool -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore \
-              -storepass android -dname "CN=ReadMateFixed,O=ReadMate,C=US" -validity 10000 -keyalg RSA -keysize 2048
-          fi
+          # Same key ko default Android home mein bhi rakh dein
+          cp debug.keystore ~/.android/debug.keystore
 
-          # Google Services config
+          # 2. Google Services configuration
           cat << 'EOF' > app/google-services.json
           {
             "project_info": {
@@ -120,7 +112,7 @@ jobs:
           files: ${{ env.APK_PATH }}
           tag_name: ${{ env.VERSION_TAG }}
           name: ${{ env.VERSION_NAME }}
-          body: "Automated build ${{ env.VERSION_TAG }} generated with unified signature."
+          body: "Automated build ${{ env.VERSION_TAG }} generated successfully."
           draft: false
           prerelease: false
         env:
