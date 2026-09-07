@@ -86,6 +86,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.data.updater.UpdateState
+import com.example.ui.components.updater.ObsidianUpdateDialog
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -170,6 +172,9 @@ fun DashboardScreen(
     val context = LocalContext.current
     val app = context.applicationContext as ReadMateApplication
 
+    val updateManager = remember(app) { app.updateManager }
+    val updateState by updateManager.updateState.collectAsStateWithLifecycle()
+
     val notificationManager = remember(app) { app.inAppNotificationManager }
     val activeNotifications by notificationManager.activeNotifications.collectAsStateWithLifecycle()
     val unreadNotificationsCount by notificationManager.unreadCount.collectAsStateWithLifecycle()
@@ -177,6 +182,7 @@ fun DashboardScreen(
 
     LaunchedEffect(Unit) {
         notificationManager.evaluateNotifications()
+        updateManager.checkSilentlyOnLaunch()
     }
 
     LaunchedEffect(showNotificationDialog) {
@@ -230,6 +236,17 @@ fun DashboardScreen(
             onClearNotification = { id ->
                 notificationManager.clearNotification(id)
             }
+        )
+    }
+
+    // Obsidian-Themed Auto-Update Prompt
+    if (updateState is UpdateState.UpdateAvailable) {
+        val availableState = updateState as UpdateState.UpdateAvailable
+        ObsidianUpdateDialog(
+            state = availableState,
+            onStartDownload = { info -> updateManager.startDownload(info) },
+            onInstall = { file -> updateManager.installUpdate(file) },
+            onDismiss = { updateManager.dismissDialog() }
         )
     }
 

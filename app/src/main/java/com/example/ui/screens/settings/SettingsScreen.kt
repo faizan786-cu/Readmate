@@ -80,9 +80,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.BuildConfig
 import com.example.ReadMateApplication
 import com.example.data.model.GeminiConnectionState
 import com.example.data.repository.UserPreferencesRepository
+import com.example.data.updater.UpdateState
+import com.example.ui.components.updater.ObsidianUpdateDialog
+import androidx.compose.material.icons.filled.Sync
 import com.example.ui.components.chat.DedicatedSnippedPassageQuoteCard
 import com.example.ui.components.ReadMateBrandLogo
 import com.example.ui.screens.chat.FormattedRomanUrduContent
@@ -135,12 +139,25 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as ReadMateApplication
+    val updateManager = remember(app) { app.updateManager }
+    val updateState by updateManager.updateState.collectAsStateWithLifecycle()
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val responseFontSizePercent by viewModel.responseFontSizePercent.collectAsStateWithLifecycle()
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
     val currentUser = remember { app.authRepository.getCurrentUser() }
+
+    // Obsidian Auto-Update Dialog
+    if (updateState is UpdateState.UpdateAvailable) {
+        val available = updateState as UpdateState.UpdateAvailable
+        ObsidianUpdateDialog(
+            state = available,
+            onStartDownload = { info -> updateManager.startDownload(info) },
+            onInstall = { file -> updateManager.installUpdate(file) },
+            onDismiss = { updateManager.dismissDialog() }
+        )
+    }
 
     // Dialog: Test API Dashboard Modal
     TestApiDashboardDialog(
@@ -994,7 +1011,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Version 1.0 • View Architecture",
+                                    text = "Version ${BuildConfig.VERSION_NAME} • View Architecture",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 12.sp,
                                     color = ZincMuted
@@ -1016,6 +1033,80 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
                             color = ZincMuted
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Obsidian Check for Updates Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (updateState !is UpdateState.Checking) {
+                                updateManager.checkForUpdates(force = true)
+                            }
+                        }
+                        .testTag("settings_check_update_card"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = CardSurfaceZinc
+                    ),
+                    border = BorderStroke(1.dp, SlateBorder)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = "Check for updates",
+                                tint = CrispWhite,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Auto-Updater System",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = CrispWhite
+                                )
+                                Text(
+                                    text = when (val state = updateState) {
+                                        is UpdateState.Checking -> "Connecting to GitHub releases..."
+                                        is UpdateState.UpToDate -> "ReadMate is up to date (v${state.version})"
+                                        is UpdateState.UpdateAvailable -> "New version ready: ${state.updateInfo.newVersion}"
+                                        is UpdateState.Error -> state.message
+                                        else -> "GitHub Release: faizan786-cu/Readmate"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = ZincMuted
+                                )
+                            }
+                        }
+
+                        if (updateState is UpdateState.Checking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = CrispWhite,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = "Check →",
+                                color = CrispWhite,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 

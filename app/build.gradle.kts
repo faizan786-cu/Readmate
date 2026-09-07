@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.readmate.klnzvq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = project.findProperty("customVersionCode")?.toString()?.toInt() ?: 1
+    versionName = project.findProperty("customVersionName")?.toString() ?: "1.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

@@ -111,9 +111,16 @@ class ReadMateApplication : Application() {
             chapterMessageRepository = chapterMessageRepository
         )
     }
+    val updateManager: com.example.data.updater.UpdateManager by lazy {
+        com.example.data.updater.UpdateManager(this)
+    }
 
     override fun onCreate() {
         super.onCreate()
+        try {
+            updateManager.checkSilentlyOnLaunch()
+        } catch (_: Exception) {}
+
         try {
             NotificationHelper.createRetentionNotificationChannel(this)
         } catch (_: Exception) {}
