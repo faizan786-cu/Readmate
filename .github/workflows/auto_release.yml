@@ -23,15 +23,43 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Generate Keystore & Mock Google Services
+      - name: Prepare Signing Key and Google Services
         run: |
-          # 1. Generate missing debug.keystore in project root
+          # 1. Generate standard debug keystore
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
-          # 2. Prevent crash if google-services.json is missing
-          if [ ! -f "app/google-services.json" ]; then
-            echo '{"project_info":{"project_number":"0","project_id":"readmate"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"com.readmate"}},"api_key":[{"current_key":"mock"}]}]}' > app/google-services.json
-          fi
+          # 2. Inject google-services.json matching the exact app package name
+          cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "1234567890",
+              "project_id": "readmate-auto",
+              "storage_bucket": "readmate-auto.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:1234567890:android:abcdef123456",
+                  "android_client_info": {
+                    "package_name": "com.aistudio.readmate.klnzvq"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyFakeKeyForBuildValidationPurposeOnly"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
 
       - name: Auto-Bump Version and Build APK
         id: build_apk
