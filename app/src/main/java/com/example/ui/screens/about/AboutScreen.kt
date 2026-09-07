@@ -290,12 +290,12 @@ private fun HeroIdentityCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 26.dp, horizontal = 20.dp),
+                .padding(vertical = 16.dp, horizontal = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Center showcase emblem (size = 80dp)
+            // Center showcase emblem (compact 48dp)
             ReadMateBrandLogo(
-                size = 80.dp,
+                size = 48.dp,
                 showWordmark = false,
                 modifier = Modifier.graphicsLayer {
                     scaleX = logoScale
@@ -303,18 +303,18 @@ private fun HeroIdentityCard(
                 }
             )
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // App Name: ReadMate (styled strictly with clean tracking: letter-spacing 0.5sp, bold, #FFFFFF)
+            // App Name: ReadMate
             Text(
                 text = "ReadMate",
-                fontSize = 24.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.5.sp,
                 color = CrispWhite
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Subtitle: EXECUTIVE KNOWLEDGE ACCELERATION ENGINE (10.sp, FontWeight.SemiBold, letterSpacing = 2.sp, #71717A)
             Text(
@@ -326,7 +326,7 @@ private fun HeroIdentityCard(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Version Pill: v1.0.0 • PRODUCTION READY in a clean capsule chip
             Surface(
@@ -340,7 +340,7 @@ private fun HeroIdentityCard(
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 1.sp,
                     color = TextBodyMuted,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
             }
         }
