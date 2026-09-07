@@ -5,9 +5,14 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,10 +30,8 @@ jobs:
 
       - name: Prepare Signing Key and Google Services
         run: |
-          # 1. Generate standard debug keystore
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
-          # 2. Inject google-services.json matching the exact app package name
           cat << 'EOF' > app/google-services.json
           {
             "project_info": {
