@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Book Shadow -->
+    <path
+        android:pathData="M27,74 Q54,82 81,74 L81,77 Q54,85 27,77 Z"
+        android:fillColor="#15000000" />
+    
+    <!-- Open Book Left Page -->
+    <path
+        android:pathData="M52,36 L32,36 C29.8,36 28,37.8 28,40 L28,72 C28,73.1 28.9,74 30,74 C30.3,74 30.7,73.9 31,73.8 C36.2,71.5 44.5,70.5 52,73 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="28"
+                android:startY="36"
+                android:endX="52"
+                android:endY="74"
+                android:type="linear">
+                <item android:color="#F8FAFC" android:offset="0.0" />
+                <item android:color="#E2E8F0" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Open Book Right Page -->
+    <path
+        android:pathData="M56,36 L76,36 C78.2,36 80,37.8 80,40 L80,72 C80,73.1 79.1,74 78,74 C77.7,74 77.3,73.9 77,73.8 C71.8,71.5 63.5,70.5 56,73 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="80"
+                android:startY="36"
+                android:endX="56"
+                android:endY="74"
+                android:type="linear">
+                <item android:color="#FFFFFF" android:offset="0.0" />
+                <item android:color="#F1F5F9" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bookmark Ribbon -->
+    <path
+        android:pathData="M50,34 L58,34 L58,54 L54,50 L50,54 Z"
+        android:fillColor="#F59E0B" />
+
+    <!-- Spine Center Indicator -->
+    <path
+        android:pathData="M53,35 L55,35 L55,73 L53,73 Z"
+        android:fillColor="#CBD5E1" />
+
+    <!-- Clean Page Lines (Left) -->
+    <path
+        android:pathData="M34,44 L47,44 M34,49 L47,49 M34,54 L44,54 M34,59 L46,59"
+        android:strokeWidth="1.8"
+        android:strokeColor="#94A3B8"
+        android:strokeLineCap="round" />
+
+    <!-- Clean Page Lines (Right) -->
+    <path
+        android:pathData="M61,44 L74,44 M61,49 L74,49 M61,54 L71,54 M61,59 L74,59"
+        android:strokeWidth="1.8"
+        android:strokeColor="#CBD5E1"
+        android:strokeLineCap="round" />
+</vector>
+
