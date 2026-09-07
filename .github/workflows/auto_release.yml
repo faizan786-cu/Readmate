@@ -3,7 +3,7 @@ name: Auto Build & Release on Push
 on:
   push:
     branches:
-      - main # agar aapki branch 'master' hai to yahan master likhein
+      - main
 
 jobs:
   build-and-release:
@@ -23,21 +23,30 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Generate Keystore & Mock Google Services
+        run: |
+          # 1. Generate missing debug.keystore in project root
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
+          # 2. Prevent crash if google-services.json is missing
+          if [ ! -f "app/google-services.json" ]; then
+            echo '{"project_info":{"project_number":"0","project_id":"readmate"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"com.readmate"}},"api_key":[{"current_key":"mock"}]}]}' > app/google-services.json
+          fi
+
       - name: Auto-Bump Version and Build APK
         id: build_apk
         run: |
           BUILD_NUM=${{ github.run_number }}
           VERSION_NAME="1.0.${BUILD_NUM}"
           echo "Building Version: $VERSION_NAME ($BUILD_NUM)"
-          
-          # Agar gradlew file exist karti hai to use karein, warna direct gradle CLI se build karein
+
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
-            ./gradlew assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME"
+            ./gradlew assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME" --stacktrace
           else
-            gradle assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME"
+            gradle assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME" --stacktrace
           fi
-          
+
           echo "VERSION_TAG=v1.0.${BUILD_NUM}" >> $GITHUB_ENV
           echo "VERSION_NAME=Release v1.0.${BUILD_NUM}" >> $GITHUB_ENV
 
@@ -49,6 +58,7 @@ jobs:
             echo "ERROR: APK file not found!"
             exit 1
           fi
+          echo "Found APK at: $APK_PATH"
           echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
 
       - name: Create GitHub Release
@@ -57,7 +67,7 @@ jobs:
           files: ${{ env.APK_PATH }}
           tag_name: ${{ env.VERSION_TAG }}
           name: ${{ env.VERSION_NAME }}
-          body: "Automated update build ${{ env.VERSION_TAG }} generated successfully."
+          body: "Automated build ${{ env.VERSION_TAG }} generated successfully."
           draft: false
           prerelease: false
         env:
