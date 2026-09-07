@@ -173,14 +173,14 @@ fun AboutScreen(
                 CommissionCtaCard(
                     onWhatsAppClick = {
                         val message = Uri.encode("Hello Faizan, reaching out regarding ReadMate development and inquiries...")
-                        val url = "https://wa.me/92364438828?text=$message"
+                        val url = "https://wa.me/923164438828?text=$message"
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                         try {
                             context.startActivity(intent)
                         } catch (_: Exception) {
                             // Fallback to browser intent
                             try {
-                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=92364438828&text=$message"))
+                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=923164438828&text=$message"))
                                 context.startActivity(browserIntent)
                             } catch (_: Exception) {
                                 Toast.makeText(context, "Unable to launch WhatsApp", Toast.LENGTH_SHORT).show()
