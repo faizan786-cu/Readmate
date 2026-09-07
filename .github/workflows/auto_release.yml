@@ -3,7 +3,7 @@ name: Auto Build & Release on Push
 on:
   push:
     branches:
-      - main # ya aapki jo bhi default branch hai
+      - main # agar aapki branch 'master' hai to yahan master likhein
 
 jobs:
   build-and-release:
@@ -30,9 +30,13 @@ jobs:
           VERSION_NAME="1.0.${BUILD_NUM}"
           echo "Building Version: $VERSION_NAME ($BUILD_NUM)"
           
-          # Gradle ko command line se dynamic version pass karna
-          chmod +x ./gradlew
-          ./gradlew assembleRelease -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME" || ./gradlew assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME"
+          # Agar gradlew file exist karti hai to use karein, warna direct gradle CLI se build karein
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME"
+          else
+            gradle assembleDebug -PcustomVersionCode=$BUILD_NUM -PcustomVersionName="$VERSION_NAME"
+          fi
           
           echo "VERSION_TAG=v1.0.${BUILD_NUM}" >> $GITHUB_ENV
           echo "VERSION_NAME=Release v1.0.${BUILD_NUM}" >> $GITHUB_ENV
@@ -41,6 +45,10 @@ jobs:
         id: find_apk
         run: |
           APK_PATH=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: APK file not found!"
+            exit 1
+          fi
           echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
 
       - name: Create GitHub Release
@@ -49,7 +57,7 @@ jobs:
           files: ${{ env.APK_PATH }}
           tag_name: ${{ env.VERSION_TAG }}
           name: ${{ env.VERSION_NAME }}
-          body: "Automated update pushed via Google AI Studio."
+          body: "Automated update build ${{ env.VERSION_TAG }} generated successfully."
           draft: false
           prerelease: false
         env:
