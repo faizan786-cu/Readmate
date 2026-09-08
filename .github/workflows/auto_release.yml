@@ -28,40 +28,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Cache Permanent Signing Keystore
-        id: cache-keystore
-        uses: actions/cache@v4
-        with:
-          path: signing_vault/readmate_permanent.keystore
-          key: readmate-permanent-signing-keystore-v1
-
-      - name: Setup Deterministic Keystore and Google Services
+      - name: Setup Committed Keystore and Google Services
         run: |
-          mkdir -p signing_vault
-          KEYSTORE_PATH="signing_vault/readmate_permanent.keystore"
-
-          # Agar cache mein pehle se keystore mojood nahi hai to ek baar banayein
-          if [ ! -f "$KEYSTORE_PATH" ]; then
-            echo "Creating Master Permanent Keystore..."
-            keytool -genkeypair -v \
-              -keystore "$KEYSTORE_PATH" \
-              -alias readmatekey \
-              -keypass androidpass \
-              -storepass androidpass \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=ReadMate,O=ReadMateApp,C=US"
-          else
-            echo "Master Permanent Keystore restored from cache!"
-          fi
-
-          # Gradle build ke path par copy karein
-          cp "$KEYSTORE_PATH" debug.keystore
+          # 1. Jo keystore repo mein upload kiya hai usay standard SDK path par link karein
           mkdir -p ~/.android
-          cp "$KEYSTORE_PATH" ~/.android/debug.keystore
+          cp debug.keystore ~/.android/debug.keystore
 
-          # Google Services config inject karein
+          # 2. Mock google-services.json inject karein
           cat << 'EOF' > app/google-services.json
           {
             "project_info": {
@@ -128,7 +101,7 @@ jobs:
           files: ${{ env.APK_PATH }}
           tag_name: ${{ env.VERSION_TAG }}
           name: ${{ env.VERSION_NAME }}
-          body: "Automated build ${{ env.VERSION_TAG }} generated with persistent signature cache."
+          body: "Automated build ${{ env.VERSION_TAG }} signed with master repository keystore."
           draft: false
           prerelease: false
         env:
