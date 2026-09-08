@@ -100,11 +100,13 @@ import com.example.ui.viewmodel.SettingsViewModel
 private val CanvasObsidian = Color(0xFF0B0B0E)
 private val CardSurfaceZinc = Color(0xFF141418)
 private val SubduedZinc = Color(0xFF101013)
-private val IconContainerZinc = Color(0xFF1C1C22)
+private val IconContainerZinc = Color(0xFF1F1F24)
+private val CardBorderZinc = Color(0xFF1F1F24)
 private val SlateBorder = Color(0xFF27272F)
 private val CrispWhite = Color(0xFFFFFFFF)
 private val ZincMuted = Color(0xFFA1A1AA)
 private val ZincSubtle = Color(0xFF71717A)
+private val EmeraldStatus = Color(0xFF10B981)
 private val DangerRed = Color(0xFFEF4444)
 private val DangerRedBg = Color(0xFF3B1215)
 private val DangerRedBorder = Color(0x44EF4444)
@@ -416,22 +418,25 @@ fun SettingsScreen(
             ) {
                 // Section 1: AI Integration
                 Text(
-                    text = "AI Integration",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = CrispWhite,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    text = "AI INTEGRATION",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = ZincSubtle,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp)
                 )
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("gemini_settings_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardSurfaceZinc
                     ),
-                    border = BorderStroke(1.dp, SlateBorder),
+                    border = BorderStroke(1.dp, CardBorderZinc),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
@@ -441,10 +446,10 @@ fun SettingsScreen(
                     ) {
                         val isConnected = app.secureApiKeyStorage.hasValidCredentials()
 
-                        // Header Layout: Left 40dp icon box, Clean Title "Gemini API Keys" on single line with Status Pill
+                        // Header Layout: Left 40dp icon box, Clean Title Row with green dot indicator
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Top
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
@@ -457,7 +462,7 @@ fun SettingsScreen(
                                         imageVector = Icons.Default.AutoAwesome,
                                         contentDescription = null,
                                         tint = CrispWhite,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -466,65 +471,44 @@ fun SettingsScreen(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
                                         text = "Gemini API Keys",
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 16.sp,
+                                        fontSize = 15.sp,
                                         color = CrispWhite,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
 
                                     if (isConnected) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color(0xFF064E3B).copy(alpha = 0.4f),
-                                            border = BorderStroke(1.dp, Color(0xFF064E3B)),
-                                            modifier = Modifier.testTag("status_badge_connected")
-                                        ) {
-                                            Text(
-                                                text = "Connected • Active",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Medium,
-                                                    fontSize = 11.sp,
-                                                    letterSpacing = 0.3.sp
-                                                ),
-                                                color = Color(0xFF10B981),
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .background(EmeraldStatus, CircleShape)
+                                                .testTag("status_badge_connected")
+                                        )
                                     } else {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = SubduedZinc,
-                                            border = BorderStroke(1.dp, SlateBorder),
-                                            modifier = Modifier.testTag("status_badge_not_connected")
-                                        ) {
-                                            Text(
-                                                text = "Not Configured",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Medium,
-                                                    fontSize = 11.sp,
-                                                    letterSpacing = 0.3.sp
-                                                ),
-                                                color = ZincSubtle,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .background(ZincSubtle, CircleShape)
+                                                .testTag("status_badge_not_connected")
+                                        )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(3.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
 
                                 Text(
-                                    text = "Manage pooled keys, bulk import, and key health.",
+                                    text = if (isConnected) "Active key failover pool configured" else "Manage pooled keys, bulk import, and key health",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 12.sp,
-                                    color = ZincMuted
+                                    color = ZincMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -541,9 +525,9 @@ fun SettingsScreen(
                             // Failover Meta row in subtle #71717A color
                             Text(
                                 text = if (keys.size > 1) {
-                                    "${keys.size} keys configured with auto-failover • Primary: $maskedPrimary"
+                                    "${keys.size} keys configured • Primary: $maskedPrimary"
                                 } else {
-                                    "1 key configured with auto-failover • Primary: $maskedPrimary"
+                                    "1 key configured • Primary: $maskedPrimary"
                                 },
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                                 color = ZincSubtle,
@@ -552,7 +536,7 @@ fun SettingsScreen(
                                 modifier = Modifier.padding(bottom = 12.dp)
                             )
 
-                            // Action Buttons with equal visual weight, minimum 40dp height, proper internal padding
+                            // Action Buttons with equal visual weight, 36dp pill height, proper internal padding
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -561,29 +545,29 @@ fun SettingsScreen(
                                 // Primary Action: Manage Keys
                                 Button(
                                     onClick = onNavigateToApiManagement,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = SubduedZinc,
                                         contentColor = CrispWhite
                                     ),
                                     border = BorderStroke(1.dp, SlateBorder),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(40.dp)
+                                        .height(36.dp)
                                         .testTag("change_api_key_button")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Key,
                                         contentDescription = null,
                                         tint = CrispWhite,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = "Manage",
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 12.sp,
                                         maxLines = 1
                                     )
                                 }
@@ -591,7 +575,7 @@ fun SettingsScreen(
                                 // Secondary Action: Test API
                                 OutlinedButton(
                                     onClick = { viewModel.openTestApiDashboard() },
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = SubduedZinc,
                                         contentColor = ZincMuted
@@ -600,20 +584,20 @@ fun SettingsScreen(
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier
                                         .weight(0.9f)
-                                        .height(40.dp)
+                                        .height(36.dp)
                                         .testTag("test_api_dashboard_button")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Speed,
                                         contentDescription = null,
                                         tint = ZincMuted,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Test",
                                         fontWeight = FontWeight.Medium,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 12.sp,
                                         maxLines = 1
                                     )
                                 }
@@ -621,7 +605,7 @@ fun SettingsScreen(
                                 // Secondary Action: Disconnect (danger-tinted outline)
                                 OutlinedButton(
                                     onClick = { showDisconnectDialog = true },
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = SubduedZinc,
                                         contentColor = DangerRed
@@ -630,7 +614,7 @@ fun SettingsScreen(
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier
                                         .weight(1.1f)
-                                        .height(40.dp)
+                                        .height(36.dp)
                                         .testTag("disconnect_gemini_button")
                                 ) {
                                     Text(
@@ -649,7 +633,7 @@ fun SettingsScreen(
                             ) {
                                 Button(
                                     onClick = onNavigateToApiManagement,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = CrispWhite,
                                         contentColor = CanvasObsidian
@@ -657,20 +641,20 @@ fun SettingsScreen(
                                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(40.dp)
+                                        .height(36.dp)
                                         .testTag("connect_gemini_button")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Key,
                                         contentDescription = null,
-                                        modifier = Modifier.size(15.dp),
+                                        modifier = Modifier.size(14.dp),
                                         tint = CanvasObsidian
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "Configure API Keys",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
+                                        fontSize = 12.5.sp,
                                         color = CanvasObsidian,
                                         maxLines = 1
                                     )
@@ -678,18 +662,18 @@ fun SettingsScreen(
 
                                 OutlinedButton(
                                     onClick = onNavigateToApiManagement,
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = SubduedZinc,
                                         contentColor = ZincMuted
                                     ),
                                     border = BorderStroke(1.dp, SlateBorder),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                     modifier = Modifier
-                                        .height(40.dp)
+                                        .height(36.dp)
                                         .testTag("configure_gemini_button")
                                 ) {
-                                    Text("Add Key", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                                    Text("Add Key", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                         }
@@ -700,22 +684,25 @@ fun SettingsScreen(
 
                 // Section 2: Reading & Display Preferences (Response Font Size)
                 Text(
-                    text = "Reading & Display",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = CrispWhite,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    text = "READING & DISPLAY",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = ZincSubtle,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp)
                 )
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("response_font_size_settings_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardSurfaceZinc
                     ),
-                    border = BorderStroke(1.dp, SlateBorder),
+                    border = BorderStroke(1.dp, CardBorderZinc),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
@@ -958,11 +945,14 @@ fun SettingsScreen(
 
                 // Section 3: About
                 Text(
-                    text = "About",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = CrispWhite,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    text = "ABOUT",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = ZincSubtle,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp)
                 )
 
                 Card(
@@ -970,11 +960,11 @@ fun SettingsScreen(
                         .fillMaxWidth()
                         .clickable { onNavigateToAbout() }
                         .testTag("settings_about_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardSurfaceZinc
                     ),
-                    border = BorderStroke(1.dp, SlateBorder),
+                    border = BorderStroke(1.dp, CardBorderZinc),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
@@ -1041,26 +1031,22 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Auto-Updater Card: Sanitized, elegant metadata display
+                // Auto-Updater Card: Streamlined sleek single-line list-tile
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            if (updateState !is UpdateState.Checking) {
-                                updateManager.checkForUpdates(force = true)
-                            }
-                        }
                         .testTag("settings_check_update_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardSurfaceZinc
                     ),
-                    border = BorderStroke(1.dp, SlateBorder)
+                    border = BorderStroke(1.dp, CardBorderZinc),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -1077,50 +1063,74 @@ fun SettingsScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Default.Sync,
-                                        contentDescription = "Check for updates",
+                                        contentDescription = "Auto-Updater",
                                         tint = CrispWhite,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
                             Spacer(modifier = Modifier.width(14.dp))
-                            Column {
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
                                     text = "Auto-Updater",
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp,
-                                    color = CrispWhite
+                                    color = CrispWhite,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = when (val state = updateState) {
-                                        is UpdateState.Checking -> "Connecting to releases..."
-                                        is UpdateState.UpToDate -> "Up to date (v$appVersionName)"
-                                        is UpdateState.UpdateAvailable -> "New version ready: ${state.updateInfo.newVersion}"
+                                        is UpdateState.Checking -> "Checking for updates..."
+                                        is UpdateState.UpToDate -> "v$appVersionName • Up to date"
+                                        is UpdateState.UpdateAvailable -> "New version: ${state.updateInfo.newVersion}"
                                         is UpdateState.Error -> state.message
-                                        else -> "Installed: v$appVersionName • GitHub Releases"
+                                        else -> "v$appVersionName • GitHub Releases"
                                     },
                                     fontSize = 12.sp,
-                                    color = ZincMuted
+                                    color = ZincMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                        if (updateState is UpdateState.Checking) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = CrispWhite,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Check for Updates ↗",
-                                color = CrispWhite,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                        OutlinedButton(
+                            onClick = {
+                                if (updateState !is UpdateState.Checking) {
+                                    updateManager.checkForUpdates(force = true)
+                                }
+                            },
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = SubduedZinc,
+                                contentColor = CrispWhite
+                            ),
+                            border = BorderStroke(1.dp, SlateBorder),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                            enabled = updateState !is UpdateState.Checking,
+                            modifier = Modifier
+                                .height(36.dp)
+                                .testTag("check_update_button")
+                        ) {
+                            if (updateState is UpdateState.Checking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = CrispWhite,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = "Check Now",
+                                    color = CrispWhite,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
@@ -1129,22 +1139,25 @@ fun SettingsScreen(
 
                 // Section 4: Account & Cloud Identity
                 Text(
-                    text = "Account & Cloud Identity",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = CrispWhite,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    text = "ACCOUNT & CLOUD IDENTITY",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = ZincSubtle,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp)
                 )
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("account_settings_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardSurfaceZinc
                     ),
-                    border = BorderStroke(1.dp, SlateBorder),
+                    border = BorderStroke(1.dp, CardBorderZinc),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
@@ -1160,7 +1173,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Obsidian Avatar Circle: #1C1C22 with crisp white initial letter
+                            // Obsidian Avatar Circle: #1F1F24 with crisp white initial letter
                             Surface(
                                 shape = CircleShape,
                                 color = IconContainerZinc,
@@ -1204,7 +1217,7 @@ fun SettingsScreen(
                         // Sign Out Button: Outlined style with #27272F border, #141418 background
                         OutlinedButton(
                             onClick = { showSignOutDialog = true },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(18.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = CardSurfaceZinc,
                                 contentColor = CrispWhite
@@ -1236,22 +1249,25 @@ fun SettingsScreen(
 
                 // Section 5: Danger Zone
                 Text(
-                    text = "Danger Zone",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    text = "DANGER ZONE",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
                     color = DangerRed,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp)
                 )
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("danger_zone_card"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = CardSurfaceZinc
                     ),
-                    border = BorderStroke(1.dp, SlateBorder),
+                    border = BorderStroke(1.dp, CardBorderZinc),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
@@ -1303,7 +1319,7 @@ fun SettingsScreen(
                         // Danger Reset Action: #141418 background with #EF4444 outline and red text/icon
                         OutlinedButton(
                             onClick = { showResetConfirmDialog = true },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(18.dp),
                             border = BorderStroke(1.dp, DangerRedBorder),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 containerColor = CardSurfaceZinc,
