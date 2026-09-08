@@ -55,7 +55,6 @@ private val ObsidianIconBox = Color(0xFF1F1F24)
 private val ObsidianWhite = Color(0xFFFFFFFF)
 private val ObsidianMuted = Color(0xFF71717A)
 private val ObsidianTextSubtle = Color(0xFFA1A1AA)
-private val ObsidianEmerald = Color(0xFF10B981)
 
 @Composable
 fun ObsidianUpdateDialog(
@@ -237,42 +236,26 @@ fun ObsidianUpdateDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // States:
-                // 1. Downloading: Metrics header (Emerald progress + MB text) + 6dp linear progress bar (#27272F track, #10B981 emerald indicator)
+                // 1. Downloading: Clean white status label + 5dp pure white progress bar with #27272F base track
                 if (state.isDownloading) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Downloading Update... (${state.downloadProgress}%)",
-                                color = ObsidianEmerald,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                        Text(
+                            text = "Downloading Update... ${state.downloadProgress}%",
+                            color = ObsidianWhite,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
 
-                            if (state.totalBytes > 0) {
-                                val currentMb = String.format(Locale.US, "%.1f", state.downloadedBytes / (1024f * 1024f))
-                                val totalMb = String.format(Locale.US, "%.1f", state.totalBytes / (1024f * 1024f))
-                                Text(
-                                    text = "$currentMb / $totalMb MB",
-                                    color = ObsidianMuted,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Linear progress bar (#10B981 emerald indicator, #27272F base track, 6dp height)
+                        // Linear progress bar (#FFFFFF pure white indicator, #27272F base track, 5dp height, rounded 10dp)
                         LinearProgressIndicator(
                             progress = { (state.downloadProgress / 100f).coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = ObsidianEmerald,
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                            color = ObsidianWhite,
                             trackColor = ObsidianBorder
                         )
                     }
