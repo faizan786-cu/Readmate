@@ -7,12 +7,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -20,7 +30,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.ReadMateApplication
 import com.example.ui.components.AppNavigationDrawer
+import com.example.ui.components.feedback.ReportIssueModal
 import com.example.ui.screens.about.AboutScreen
 import com.example.ui.screens.auth.AuthScreen
 import com.example.ui.screens.book.BookDetailScreen
@@ -51,6 +63,20 @@ fun ReadMateNavGraph(
     val coroutineScope = rememberCoroutineScope()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
+
+    val context = LocalContext.current
+    val app = remember(context) { context.applicationContext as ReadMateApplication }
+    val userEmail = remember { app.authRepository.getCurrentUser()?.email ?: "" }
+    val appVersionName = remember(context) {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.0.0"
+        } catch (_: Exception) {
+            "1.0.0"
+        }
+    }
+    var showReportModal by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     AppNavigationDrawer(
         drawerState = drawerState,
@@ -102,12 +128,17 @@ fun ReadMateNavGraph(
                     launchSingleTop = true
                 }
             }
+        },
+        onReportIssue = {
+            coroutineScope.launch { drawerState.close() }
+            showReportModal = true
         }
     ) {
-        NavHost(
-            navController = navController,
-            startDestination = startDestination,
-            modifier = modifier,
+        Box(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                navController = navController,
+                startDestination = startDestination,
+                modifier = modifier,
             enterTransition = {
                 slideIntoContainer(
                     towards = AnimatedContentTransitionScope.SlideDirection.Left,
@@ -560,6 +591,26 @@ fun ReadMateNavGraph(
                 )
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+
+        ReportIssueModal(
+            isOpen = showReportModal,
+            userEmail = userEmail,
+            appVersionName = appVersionName,
+            onDismiss = { showReportModal = false },
+            onSubmitSuccess = {
+                showReportModal = false
+                Toast.makeText(context, "Report received successfully. Thank you!", Toast.LENGTH_LONG).show()
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Report received successfully. Thank you!")
+                }
+            }
+        )
     }
+}
 }
 

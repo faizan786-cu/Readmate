@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Settings
@@ -66,6 +67,7 @@ fun AppNavigationDrawer(
     onNavigateToProgress: () -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onNavigateToAbout: () -> Unit = {},
+    onReportIssue: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -215,6 +217,14 @@ fun AppNavigationDrawer(
                             isSelected = currentRoute == "about_screen",
                             onClick = onNavigateToAbout,
                             modifier = Modifier.testTag("drawer_menu_about")
+                        )
+
+                        DrawerMenuItem(
+                            label = "Report an Issue",
+                            icon = Icons.Default.BugReport,
+                            isSelected = false,
+                            onClick = onReportIssue,
+                            modifier = Modifier.testTag("drawer_menu_report_issue")
                         )
                     }
 
