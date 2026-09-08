@@ -111,7 +111,11 @@ object AppViewModelProvider {
         }
         initializer {
             val app = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as ReadMateApplication)
-            GeminiConfigViewModel(app.geminiRepository)
+            GeminiConfigViewModel(
+                geminiRepository = app.geminiRepository,
+                authRepository = app.authRepository,
+                apiKeyVaultSyncService = app.apiKeyVaultSyncService
+            )
         }
         initializer {
             val app = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as ReadMateApplication)

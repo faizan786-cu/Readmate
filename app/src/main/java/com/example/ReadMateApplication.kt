@@ -73,6 +73,9 @@ class ReadMateApplication : Application() {
     val authSessionStorage: AuthSessionStorage by lazy { AndroidKeystoreAuthSessionStorage(this) }
     val authApiService: AuthApiService by lazy { AuthApiService.create() }
     val authRepository: AuthRepository by lazy { AuthRepository(authApiService = authApiService, authSessionStorage = authSessionStorage) }
+    val apiKeyVaultSyncService: com.example.data.remote.vault.ApiKeyVaultSyncService by lazy {
+        com.example.data.remote.vault.ApiKeyVaultSyncService()
+    }
     val geminiRepository: GeminiRepository by lazy { GeminiRepository(secureApiKeyStorage) }
     val quoteExtractionEngine: QuoteExtractionEngine by lazy {
         QuoteExtractionEngine(

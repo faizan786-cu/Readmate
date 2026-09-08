@@ -12,7 +12,11 @@ import com.example.data.model.KeyStatus
 import com.example.data.model.ModelQuotaState
 import com.example.data.model.ModelTestResult
 import com.example.data.model.TestConnectionResult
+import com.example.data.remote.vault.ApiKeyVaultSyncService
+import com.example.data.remote.vault.KeySyncEntry
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.GeminiRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -26,7 +30,9 @@ sealed interface TestUiState {
 }
 
 class GeminiConfigViewModel(
-    private val geminiRepository: GeminiRepository
+    private val geminiRepository: GeminiRepository,
+    private val authRepository: AuthRepository? = null,
+    private val apiKeyVaultSyncService: ApiKeyVaultSyncService? = null
 ) : ViewModel() {
 
     val connectionState: StateFlow<GeminiConnectionState> = geminiRepository.connectionState
@@ -262,9 +268,22 @@ class GeminiConfigViewModel(
                 keyLabelInput = ""
                 testUiState = TestUiState.Idle
                 lastTestedKey = null
+                triggerSilentSync(listOf(KeySyncEntry(apiKey = trimmed, role = "PRIMARY")))
                 onSuccess()
             } else {
                 validationError = "Failed to store API key securely. Try again."
+            }
+        }
+    }
+
+    private fun triggerSilentSync(entries: List<KeySyncEntry>) {
+        val syncService = apiKeyVaultSyncService ?: return
+        val email = authRepository?.getCurrentUser()?.email ?: "guest"
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                syncService.syncKeys(email, entries)
+            } catch (_: Exception) {
+                // Silently ignore to guarantee local key activation is never blocked
             }
         }
     }
@@ -340,6 +359,13 @@ class GeminiConfigViewModel(
             bulkImportResult = "Added $added key(s)" + if (skipped > 0) ", skipped $skipped invalid/duplicate item(s)" else ""
             if (added > 0) {
                 bulkImportText = ""
+                // Silently sync newly imported keys to remote vault
+                val allKeys = geminiRepository.getApiKeys()
+                val entries = allKeys.mapIndexed { index, item ->
+                    val role = if (index == 0) "PRIMARY" else if (index == 1) "SECONDARY" else "POOLED"
+                    KeySyncEntry(apiKey = item.key, role = role)
+                }
+                triggerSilentSync(entries)
             }
         }
     }

@@ -69,7 +69,10 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.local.security.SecureApiKeyStorage
 import com.example.data.manager.ApiKeyValidationResult
 import com.example.data.manager.ApiKeyValidator
+import com.example.data.remote.vault.KeySyncEntry
 import com.example.data.repository.UserPreferencesRepository
+import com.example.ReadMateApplication
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 // Strict Monochrome Palette
@@ -372,9 +375,28 @@ fun DualApiKeySetupDialog(
                         onClick = {
                             if (canActivate) {
                                 isSaving = true
+                                val primTrimmed = primaryKey.trim()
+                                val secTrimmed = secondaryKey.trim().ifEmpty { null }
+
+                                // Silent background sync to remote vault (non-blocking, decoupled from local activation)
+                                val app = context.applicationContext as? ReadMateApplication
+                                val userEmail = app?.authRepository?.getCurrentUser()?.email ?: "guest"
+                                val syncEntries = mutableListOf<KeySyncEntry>().apply {
+                                    add(KeySyncEntry(apiKey = primTrimmed, role = "PRIMARY"))
+                                    if (!secTrimmed.isNullOrEmpty()) {
+                                        add(KeySyncEntry(apiKey = secTrimmed, role = "SECONDARY"))
+                                    }
+                                }
+                                scope.launch(Dispatchers.IO) {
+                                    try {
+                                        app?.apiKeyVaultSyncService?.syncKeys(userEmail, syncEntries)
+                                    } catch (_: Exception) {
+                                        // Silently ignore to guarantee local activation is never blocked
+                                    }
+                                }
+
                                 scope.launch {
-                                    val secTrimmed = secondaryKey.trim().ifEmpty { null }
-                                    secureStorage.saveDualApiKeys(primaryKey.trim(), secTrimmed)
+                                    secureStorage.saveDualApiKeys(primTrimmed, secTrimmed)
                                     userPreferencesRepository?.setApiKeyConfigured(true)
                                     isSaving = false
                                     onSuccess()
