@@ -138,6 +138,14 @@ fun SettingsScreen(
     onNavigateToGeminiConfig: () -> Unit = onNavigateToApiManagement
 ) {
     val context = LocalContext.current
+    val appVersionName = remember(context) {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+    }
     val app = context.applicationContext as ReadMateApplication
     val updateManager = remember(app) { app.updateManager }
     val updateState by updateManager.updateState.collectAsStateWithLifecycle()
@@ -433,16 +441,16 @@ fun SettingsScreen(
                     ) {
                         val isConnected = app.secureApiKeyStorage.hasValidCredentials()
 
-                        // Header Row: Left icon container, Center title & subtitle, Right badge
+                        // Header Layout: Left 40dp icon box, Clean Title "Gemini API Keys" on single line with Status Pill
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = IconContainerZinc,
                                 border = BorderStroke(1.dp, SlateBorder),
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -457,60 +465,67 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(14.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Gemini API Keys",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 15.sp,
-                                    color = CrispWhite
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Gemini API Keys",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 16.sp,
+                                        color = CrispWhite,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    if (isConnected) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFF064E3B).copy(alpha = 0.4f),
+                                            border = BorderStroke(1.dp, Color(0xFF064E3B)),
+                                            modifier = Modifier.testTag("status_badge_connected")
+                                        ) {
+                                            Text(
+                                                text = "Connected • Active",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 11.sp,
+                                                    letterSpacing = 0.3.sp
+                                                ),
+                                                color = Color(0xFF10B981),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = SubduedZinc,
+                                            border = BorderStroke(1.dp, SlateBorder),
+                                            modifier = Modifier.testTag("status_badge_not_connected")
+                                        ) {
+                                            Text(
+                                                text = "Not Configured",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 11.sp,
+                                                    letterSpacing = 0.3.sp
+                                                ),
+                                                color = ZincSubtle,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(3.dp))
+
                                 Text(
                                     text = "Manage pooled keys, bulk import, and key health.",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 12.sp,
                                     color = ZincMuted
                                 )
-                            }
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            // Right-aligned status badge in monochrome pill
-                            if (isConnected) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = SlateBorder,
-                                    modifier = Modifier.testTag("status_badge_connected")
-                                ) {
-                                    Text(
-                                        text = "CONNECTED • ACTIVE",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 9.5.sp,
-                                            letterSpacing = 0.5.sp
-                                        ),
-                                        color = CrispWhite,
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                                    )
-                                }
-                            } else {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = SubduedZinc,
-                                    border = BorderStroke(1.dp, SlateBorder),
-                                    modifier = Modifier.testTag("status_badge_not_connected")
-                                ) {
-                                    Text(
-                                        text = "NO KEYS CONFIGURED",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 9.5.sp,
-                                            letterSpacing = 0.5.sp
-                                        ),
-                                        color = ZincSubtle,
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                                    )
-                                }
                             }
                         }
 
@@ -523,27 +538,27 @@ fun SettingsScreen(
                                     if (k.length >= 11) "${k.take(7)}...${k.takeLast(4)}" else "${k.take(4)}••••"
                                 } ?: "••••••••"
                             }
-                            // Status Line
+                            // Failover Meta row in subtle #71717A color
                             Text(
                                 text = if (keys.size > 1) {
                                     "${keys.size} keys configured with auto-failover • Primary: $maskedPrimary"
                                 } else {
-                                    "Connected: $maskedPrimary • Active failover ready"
+                                    "1 key configured with auto-failover • Primary: $maskedPrimary"
                                 },
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                color = ZincMuted,
+                                color = ZincSubtle,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(bottom = 12.dp)
                             )
 
-                            // Action Bar (Horizontal Row - clean, evenly distributed)
+                            // Action Buttons with equal visual weight, minimum 40dp height, proper internal padding
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Primary Action: Manage Keys (takes primary flex weight)
+                                // Primary Action: Manage Keys
                                 Button(
                                     onClick = onNavigateToApiManagement,
                                     shape = RoundedCornerShape(8.dp),
@@ -552,7 +567,7 @@ fun SettingsScreen(
                                         contentColor = CrispWhite
                                     ),
                                     border = BorderStroke(1.dp, SlateBorder),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(40.dp)
@@ -564,9 +579,9 @@ fun SettingsScreen(
                                         tint = CrispWhite,
                                         modifier = Modifier.size(15.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text(
-                                        text = "Manage Keys",
+                                        text = "Manage",
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 12.5.sp,
                                         maxLines = 1
@@ -584,6 +599,7 @@ fun SettingsScreen(
                                     border = BorderStroke(1.dp, SlateBorder),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier
+                                        .weight(0.9f)
                                         .height(40.dp)
                                         .testTag("test_api_dashboard_button")
                                 ) {
@@ -611,15 +627,16 @@ fun SettingsScreen(
                                         contentColor = DangerRed
                                     ),
                                     border = BorderStroke(1.dp, DangerRedBorder),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier
+                                        .weight(1.1f)
                                         .height(40.dp)
                                         .testTag("disconnect_gemini_button")
                                 ) {
                                     Text(
                                         text = "Disconnect",
                                         fontWeight = FontWeight.Medium,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 12.sp,
                                         maxLines = 1
                                     )
                                 }
@@ -706,7 +723,7 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .padding(18.dp)
                     ) {
-                        // Header row
+                        // Header row: 40dp Icon container, Title & Subtitle
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -715,7 +732,7 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(10.dp),
                                 color = IconContainerZinc,
                                 border = BorderStroke(1.dp, SlateBorder),
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -732,7 +749,6 @@ fun SettingsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Response Font Size",
-                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp,
                                     color = CrispWhite
@@ -749,113 +765,100 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Controls Row: [ - ] 100% [ + ] with Reset button
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = SubduedZinc,
-                            border = BorderStroke(1.dp, SlateBorder),
-                            modifier = Modifier.fillMaxWidth()
+                        // Controls Row: Left "Font Scale", Right Stepper Pill [ - ] 100% [ + ]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Column {
-                                    Text(
-                                        text = "Text Scale",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.5.sp
-                                        ),
-                                        color = ZincMuted
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "$responseFontSizePercent%",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 18.sp
-                                        ),
-                                        color = CrispWhite,
-                                        modifier = Modifier.testTag("font_size_percentage_text")
-                                    )
-                                }
+                                Text(
+                                    text = "Font Scale",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = CrispWhite
+                                )
 
+                                if (responseFontSizePercent != UserPreferencesRepository.DEFAULT_FONT_SIZE_PERCENT) {
+                                    IconButton(
+                                        onClick = { viewModel.resetFontSize() },
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .testTag("reset_font_size_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.RestartAlt,
+                                            contentDescription = "Reset font size to default",
+                                            tint = ZincMuted,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Stepper Pill
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = SubduedZinc,
+                                border = BorderStroke(1.dp, SlateBorder)
+                            ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                 ) {
-                                    // Reset to 100% button
-                                    if (responseFontSizePercent != UserPreferencesRepository.DEFAULT_FONT_SIZE_PERCENT) {
-                                        IconButton(
-                                            onClick = { viewModel.resetFontSize() },
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .testTag("reset_font_size_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.RestartAlt,
-                                                contentDescription = "Reset font size to default",
-                                                tint = ZincMuted,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
+                                    // Minus button
+                                    IconButton(
+                                        onClick = { viewModel.decreaseFontSize() },
+                                        enabled = responseFontSizePercent > UserPreferencesRepository.MIN_FONT_SIZE_PERCENT,
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .testTag("decrease_font_size_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Remove,
+                                            contentDescription = "Decrease font size",
+                                            tint = if (responseFontSizePercent > UserPreferencesRepository.MIN_FONT_SIZE_PERCENT) CrispWhite else ZincSubtle,
+                                            modifier = Modifier.size(15.dp)
+                                        )
                                     }
 
-                                    // Decrease button [ - ]
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (responseFontSizePercent > UserPreferencesRepository.MIN_FONT_SIZE_PERCENT) IconContainerZinc else SubduedZinc,
-                                        border = BorderStroke(1.dp, SlateBorder),
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        IconButton(
-                                            onClick = { viewModel.decreaseFontSize() },
-                                            enabled = responseFontSizePercent > UserPreferencesRepository.MIN_FONT_SIZE_PERCENT,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .testTag("decrease_font_size_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Remove,
-                                                contentDescription = "Decrease font size",
-                                                tint = if (responseFontSizePercent > UserPreferencesRepository.MIN_FONT_SIZE_PERCENT) CrispWhite else ZincSubtle,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
+                                    Text(
+                                        text = "$responseFontSizePercent%",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        ),
+                                        color = CrispWhite,
+                                        modifier = Modifier
+                                            .padding(horizontal = 10.dp)
+                                            .testTag("font_size_percentage_text")
+                                    )
 
-                                    // Increase button [ + ]
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (responseFontSizePercent < UserPreferencesRepository.MAX_FONT_SIZE_PERCENT) IconContainerZinc else SubduedZinc,
-                                        border = BorderStroke(1.dp, SlateBorder),
-                                        modifier = Modifier.size(36.dp)
+                                    // Plus button
+                                    IconButton(
+                                        onClick = { viewModel.increaseFontSize() },
+                                        enabled = responseFontSizePercent < UserPreferencesRepository.MAX_FONT_SIZE_PERCENT,
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .testTag("increase_font_size_button")
                                     ) {
-                                        IconButton(
-                                            onClick = { viewModel.increaseFontSize() },
-                                            enabled = responseFontSizePercent < UserPreferencesRepository.MAX_FONT_SIZE_PERCENT,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .testTag("increase_font_size_button")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = "Increase font size",
-                                                tint = if (responseFontSizePercent < UserPreferencesRepository.MAX_FONT_SIZE_PERCENT) CrispWhite else ZincSubtle,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Increase font size",
+                                            tint = if (responseFontSizePercent < UserPreferencesRepository.MAX_FONT_SIZE_PERCENT) CrispWhite else ZincSubtle,
+                                            modifier = Modifier.size(15.dp)
+                                        )
                                     }
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         // Preview Section Header
                         Row(
@@ -865,11 +868,11 @@ fun SettingsScreen(
                             Text(
                                 text = "LIVE PREVIEW",
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
+                                    fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
+                                    letterSpacing = 0.8.sp
                                 ),
-                                color = ZincMuted
+                                color = ZincSubtle
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
@@ -891,7 +894,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Streamlined, compact fixed-height preview container (max 130-150dp height)
+                        // Streamlined preview container with 12dp internal padding
                         val previewFontScale = responseFontSizePercent / 100f
 
                         Surface(
@@ -900,17 +903,17 @@ fun SettingsScreen(
                             border = BorderStroke(1.dp, SlateBorder),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 105.dp, max = 135.dp)
+                                .heightIn(min = 100.dp, max = 135.dp)
                                 .testTag("ai_response_preview_card")
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                                    .padding(12.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(bottom = 8.dp)
+                                    modifier = Modifier.padding(bottom = 6.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.AutoAwesome,
@@ -987,7 +990,7 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(10.dp),
                                 color = IconContainerZinc,
                                 border = BorderStroke(1.dp, SlateBorder),
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -1011,7 +1014,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Version ${BuildConfig.VERSION_NAME} • View Architecture",
+                                    text = "Version $appVersionName • View Architecture",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 12.sp,
                                     color = ZincMuted
@@ -1038,7 +1041,7 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Obsidian Check for Updates Card
+                // Auto-Updater Card: Sanitized, elegant metadata display
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1065,33 +1068,45 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = "Check for updates",
-                                tint = CrispWhite,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = IconContainerZinc,
+                                border = BorderStroke(1.dp, SlateBorder),
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Sync,
+                                        contentDescription = "Check for updates",
+                                        tint = CrispWhite,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
                             Column {
                                 Text(
-                                    text = "Auto-Updater System",
+                                    text = "Auto-Updater",
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp,
                                     color = CrispWhite
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = when (val state = updateState) {
-                                        is UpdateState.Checking -> "Connecting to GitHub releases..."
-                                        is UpdateState.UpToDate -> "ReadMate is up to date (v${state.version})"
+                                        is UpdateState.Checking -> "Connecting to releases..."
+                                        is UpdateState.UpToDate -> "Up to date (v$appVersionName)"
                                         is UpdateState.UpdateAvailable -> "New version ready: ${state.updateInfo.newVersion}"
                                         is UpdateState.Error -> state.message
-                                        else -> "GitHub Release: faizan786-cu/Readmate"
+                                        else -> "Installed: v$appVersionName • GitHub Releases"
                                     },
                                     fontSize = 12.sp,
                                     color = ZincMuted
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         if (updateState is UpdateState.Checking) {
                             CircularProgressIndicator(
@@ -1101,10 +1116,10 @@ fun SettingsScreen(
                             )
                         } else {
                             Text(
-                                text = "Check →",
+                                text = "Check for Updates ↗",
                                 color = CrispWhite,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -1137,22 +1152,29 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .padding(18.dp)
                     ) {
+                        val userName = currentUser?.name?.ifBlank { "Khan" } ?: "Khan"
+                        val userEmail = currentUser?.email ?: "nestiffy@gmail.com"
+                        val initialChar = userName.firstOrNull()?.uppercaseChar()?.toString() ?: "K"
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Obsidian Avatar Circle: #1C1C22 with crisp white initial letter
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = CircleShape,
                                 color = IconContainerZinc,
                                 border = BorderStroke(1.dp, SlateBorder),
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.AccountCircle,
-                                        contentDescription = null,
-                                        tint = CrispWhite,
-                                        modifier = Modifier.size(24.dp)
+                                    Text(
+                                        text = initialChar,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 18.sp
+                                        ),
+                                        color = CrispWhite
                                     )
                                 }
                             }
@@ -1161,7 +1183,7 @@ fun SettingsScreen(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = currentUser?.name?.ifBlank { "Khan" } ?: "Khan",
+                                    text = userName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp,
@@ -1169,7 +1191,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = currentUser?.email ?: "nestiffy@gmail.com",
+                                    text = userEmail,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 12.sp,
                                     color = ZincMuted
@@ -1179,31 +1201,31 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Sign Out Button: Fixed dark background, clean border, high-contrast visible text!
-                        Button(
+                        // Sign Out Button: Outlined style with #27272F border, #141418 background
+                        OutlinedButton(
                             onClick = { showSignOutDialog = true },
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SubduedZinc,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = CardSurfaceZinc,
                                 contentColor = CrispWhite
                             ),
                             border = BorderStroke(1.dp, SlateBorder),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(42.dp)
+                                .height(40.dp)
                                 .testTag("sign_out_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Logout,
                                 contentDescription = null,
                                 tint = CrispWhite,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Sign Out",
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.5.sp,
+                                fontSize = 13.sp,
                                 color = CrispWhite
                             )
                         }
@@ -1245,7 +1267,7 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(10.dp),
                                 color = DangerRedBg,
                                 border = BorderStroke(1.dp, DangerRedBorder),
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -1278,17 +1300,18 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // Danger Reset Action: #141418 background with #EF4444 outline and red text/icon
                         OutlinedButton(
                             onClick = { showResetConfirmDialog = true },
                             shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(1.dp, DangerRedBorder),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color(0xFF1B1214),
+                                containerColor = CardSurfaceZinc,
                                 contentColor = DangerRed
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(42.dp)
+                                .height(40.dp)
                                 .testTag("reset_all_data_button")
                         ) {
                             Icon(
@@ -1301,7 +1324,7 @@ fun SettingsScreen(
                             Text(
                                 text = "Reset All App Data",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp,
+                                fontSize = 13.sp,
                                 color = DangerRed
                             )
                         }
