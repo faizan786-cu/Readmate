@@ -255,6 +255,16 @@ private fun StaggeredEntranceContainer(
 private fun HeroIdentityCard(
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val appVersionName = remember(context) {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.0.0"
+        } catch (_: Exception) {
+            "1.0.0"
+        }
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "hero_aperture_kinetic")
 
     // Breathing scale animation oscillating between 0.97f and 1.03f
@@ -328,14 +338,14 @@ private fun HeroIdentityCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Version Pill: v1.0.0 • PRODUCTION READY in a clean capsule chip
+            // Version Pill: v$appVersionName • PRODUCTION READY in a clean capsule chip
             Surface(
                 shape = RoundedCornerShape(100.dp),
                 color = SubduedZinc,
                 border = BorderStroke(1.dp, SlateBorders)
             ) {
                 Text(
-                    text = "v1.0.0 • PRODUCTION READY",
+                    text = "v$appVersionName • PRODUCTION READY",
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 1.sp,
