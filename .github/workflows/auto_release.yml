@@ -28,13 +28,26 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Setup Committed Keystore and Google Services
+      - name: Restore Master Keystore and Google Services
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          # 1. Jo keystore repo mein upload kiya hai usay standard SDK path par link karein
           mkdir -p ~/.android
-          cp debug.keystore ~/.android/debug.keystore
 
-          # 2. Mock google-services.json inject karein
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            # Windows certutil ke BEGIN/END headers remove karke pure base64 decode karna
+            echo "$KEYSTORE_BASE64" | sed '/^-----/d' | tr -d '\r\n ' | base64 -d > debug.keystore
+            cp debug.keystore ~/.android/debug.keystore
+            echo "Master keystore restored successfully from GitHub Secrets."
+          elif [ -f "debug.keystore" ]; then
+            cp debug.keystore ~/.android/debug.keystore
+            echo "Keystore restored from workspace file."
+          else
+            echo "ERROR: debug.keystore not found in repository or secrets!"
+            exit 1
+          fi
+
+          # Mock google-services.json
           cat << 'EOF' > app/google-services.json
           {
             "project_info": {
@@ -101,7 +114,7 @@ jobs:
           files: ${{ env.APK_PATH }}
           tag_name: ${{ env.VERSION_TAG }}
           name: ${{ env.VERSION_NAME }}
-          body: "Automated build ${{ env.VERSION_TAG }} signed with master repository keystore."
+          body: "Automated build ${{ env.VERSION_TAG }} signed with master repository secret key."
           draft: false
           prerelease: false
         env:
