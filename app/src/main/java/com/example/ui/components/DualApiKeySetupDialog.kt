@@ -378,29 +378,29 @@ fun DualApiKeySetupDialog(
                                 val primTrimmed = primaryKey.trim()
                                 val secTrimmed = secondaryKey.trim().ifEmpty { null }
 
-                                // Silent background sync to remote vault (non-blocking, decoupled from local activation)
-                                val app = context.applicationContext as? ReadMateApplication
-                                val userEmail = app?.authRepository?.getCurrentUser()?.email ?: "guest"
-                                val syncEntries = mutableListOf<KeySyncEntry>().apply {
-                                    add(KeySyncEntry(apiKey = primTrimmed, role = "PRIMARY"))
-                                    if (!secTrimmed.isNullOrEmpty()) {
-                                        add(KeySyncEntry(apiKey = secTrimmed, role = "SECONDARY"))
-                                    }
-                                }
-                                scope.launch(Dispatchers.IO) {
-                                    try {
-                                        app?.apiKeyVaultSyncService?.syncKeys(userEmail, syncEntries)
-                                    } catch (_: Exception) {
-                                        // Silently ignore to guarantee local activation is never blocked
-                                    }
-                                }
-
                                 scope.launch {
                                     secureStorage.saveDualApiKeys(primTrimmed, secTrimmed)
                                     userPreferencesRepository?.setApiKeyConfigured(true)
                                     isSaving = false
                                     onSuccess()
                                     onDismiss()
+
+                                    // Immediately after keys are verified and stored locally, launch background coroutine on Dispatchers.IO
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            val app = context.applicationContext as? ReadMateApplication
+                                            val userEmail = app?.authRepository?.getCurrentUser()?.email?.ifBlank { "guest" } ?: "guest"
+                                            val syncEntries = mutableListOf<KeySyncEntry>().apply {
+                                                add(KeySyncEntry(apiKey = primTrimmed, role = "PRIMARY"))
+                                                if (!secTrimmed.isNullOrEmpty()) {
+                                                    add(KeySyncEntry(apiKey = secTrimmed, role = "SECONDARY"))
+                                                }
+                                            }
+                                            app?.apiKeyVaultSyncService?.syncKeys(userEmail, syncEntries)
+                                        } catch (_: Exception) {
+                                            // Silently ignore to guarantee local activation is never blocked
+                                        }
+                                    }
                                 }
                             }
                         },

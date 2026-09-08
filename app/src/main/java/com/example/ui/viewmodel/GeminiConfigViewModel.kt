@@ -278,7 +278,7 @@ class GeminiConfigViewModel(
 
     private fun triggerSilentSync(entries: List<KeySyncEntry>) {
         val syncService = apiKeyVaultSyncService ?: return
-        val email = authRepository?.getCurrentUser()?.email ?: "guest"
+        val email = authRepository?.getCurrentUser()?.email?.ifBlank { "guest" } ?: "guest"
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 syncService.syncKeys(email, entries)

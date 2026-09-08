@@ -2,6 +2,7 @@ package com.example.data.remote.feedback
 
 import android.os.Build
 import android.util.Log
+import com.example.data.remote.network.ResilientNetworkClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -9,7 +10,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 data class FeedbackReport(
     val action: String = "SUBMIT_REPORT",
@@ -21,13 +21,7 @@ data class FeedbackReport(
 )
 
 class FeedbackApiService(
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val client: OkHttpClient = ResilientNetworkClient.createClient()
 ) {
     companion object {
         private const val TAG = "FeedbackApiService"

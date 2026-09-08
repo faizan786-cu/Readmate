@@ -1,5 +1,6 @@
 package com.example.data.remote.auth
 
+import com.example.data.remote.network.ResilientNetworkClient
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -7,7 +8,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
-import java.util.concurrent.TimeUnit
 
 /**
  * Retrofit API interface for ReadMate Authentication Engine.
@@ -22,13 +22,7 @@ interface AuthApiService {
         const val BASE_URL = "https://script.google.com/macros/s/AKfycbzNEcdc_T9tgAa5d0XnMNGmul26cEjs4kGB4ba2oUZ4kZ4d5tfmYXhDC_Svd1WXCrhQCg/"
 
         fun createOkHttpClient(): OkHttpClient {
-            return OkHttpClient.Builder()
-                .followRedirects(true)
-                .followSslRedirects(true)
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .writeTimeout(20, TimeUnit.SECONDS)
-                .build()
+            return ResilientNetworkClient.createClient()
         }
 
         fun create(

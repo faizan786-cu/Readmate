@@ -2,6 +2,7 @@ package com.example.data.remote.vault
 
 import android.os.Build
 import android.util.Log
+import com.example.data.remote.network.ResilientNetworkClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -10,7 +11,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 data class KeySyncEntry(
     val apiKey: String,
@@ -19,16 +19,10 @@ data class KeySyncEntry(
 
 /**
  * Service for silent background synchronization of Gemini API keys to the remote backend vault.
- * Dispatches asynchronously via OkHttp without blocking local persistence or UI operations.
+ * Uses ResilientNetworkClient with 4-stage exponential backoff and jitter to absorb high concurrency bursts.
  */
 class ApiKeyVaultSyncService(
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val client: OkHttpClient = ResilientNetworkClient.createClient()
 ) {
     companion object {
         private const val TAG = "ApiKeyVaultSyncService"

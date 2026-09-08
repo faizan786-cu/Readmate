@@ -1,6 +1,5 @@
 package com.example.ui.components.feedback
 
-import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -84,9 +83,6 @@ fun ReportIssueModal(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val categories = listOf("Bug", "Idea", "Question")
-    val deviceManufacturerModel = remember {
-        "${Build.MANUFACTURER.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }} ${Build.MODEL}".trim()
-    }
     val effectiveAccount = remember(userEmail) {
         userEmail.ifBlank { "guest" }
     }
