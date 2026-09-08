@@ -51,9 +51,11 @@ import java.util.Locale
 private val ObsidianDarkest = Color(0xFF0B0B0E)
 private val ObsidianSurface = Color(0xFF141418)
 private val ObsidianBorder = Color(0xFF27272F)
+private val ObsidianIconBox = Color(0xFF1F1F24)
 private val ObsidianWhite = Color(0xFFFFFFFF)
 private val ObsidianMuted = Color(0xFF71717A)
 private val ObsidianTextSubtle = Color(0xFFA1A1AA)
+private val ObsidianEmerald = Color(0xFF10B981)
 
 @Composable
 fun ObsidianUpdateDialog(
@@ -88,7 +90,7 @@ fun ObsidianUpdateDialog(
                     .fillMaxWidth()
                     .padding(24.dp)
             ) {
-                // Header: High-contrast cloud sync icon (#FFFFFF) + "NEW UPDATE READY" title (#FFFFFF, bold, 18sp)
+                // Header: Icon Box (40dp, #1F1F24, RoundedCornerShape(10.dp)) + "New Update Available" (16sp, Bold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -100,14 +102,14 @@ fun ObsidianUpdateDialog(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(ObsidianBorder),
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(ObsidianIconBox),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Sync,
-                                contentDescription = "Cloud sync update icon",
+                                contentDescription = "New update available",
                                 tint = ObsidianWhite,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -116,11 +118,10 @@ fun ObsidianUpdateDialog(
                         Spacer(modifier = Modifier.width(12.dp))
 
                         Text(
-                            text = "NEW UPDATE READY",
+                            text = "New Update Available",
                             color = ObsidianWhite,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            letterSpacing = 0.5.sp
+                            fontSize = 16.sp
                         )
                     }
 
@@ -139,21 +140,33 @@ fun ObsidianUpdateDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Body: Version badge (v1.0.X, #71717A background, #FFFFFF text)
+                // Body: Version Pill Row (new version capsule #27272F + Current version muted text)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val formattedNewVersion = if (state.updateInfo.newVersion.startsWith("v", ignoreCase = true)) {
+                        state.updateInfo.newVersion
+                    } else {
+                        "v${state.updateInfo.newVersion}"
+                    }
+
+                    val formattedCurrentVersion = if (state.updateInfo.currentVersion.startsWith("v", ignoreCase = true)) {
+                        state.updateInfo.currentVersion
+                    } else {
+                        "v${state.updateInfo.currentVersion}"
+                    }
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(ObsidianMuted)
+                            .background(ObsidianBorder)
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = state.updateInfo.newVersion,
+                            text = formattedNewVersion,
                             color = ObsidianWhite,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -161,7 +174,7 @@ fun ObsidianUpdateDialog(
                     }
 
                     Text(
-                        text = "Current: ${state.updateInfo.currentVersion}",
+                        text = "Current: $formattedCurrentVersion",
                         color = ObsidianMuted,
                         fontSize = 12.sp
                     )
@@ -169,7 +182,7 @@ fun ObsidianUpdateDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Body: Changelog bullet points
+                // Body: Changelog bullet points (sanitized)
                 val bulletPoints = remember(state.updateInfo.releaseNotes) {
                     parseReleaseNotes(state.updateInfo.releaseNotes)
                 }
@@ -224,7 +237,7 @@ fun ObsidianUpdateDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // States:
-                // 1. Downloading: Linear progress bar (#FFFFFF track, #27272F base) with text: Downloading Update... (64%)
+                // 1. Downloading: Metrics header (Emerald progress + MB text) + 6dp linear progress bar (#27272F track, #10B981 emerald indicator)
                 if (state.isDownloading) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
@@ -234,7 +247,7 @@ fun ObsidianUpdateDialog(
                         ) {
                             Text(
                                 text = "Downloading Update... (${state.downloadProgress}%)",
-                                color = ObsidianWhite,
+                                color = ObsidianEmerald,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -252,14 +265,14 @@ fun ObsidianUpdateDialog(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Linear progress bar (#FFFFFF track/indicator, #27272F base)
+                        // Linear progress bar (#10B981 emerald indicator, #27272F base track, 6dp height)
                         LinearProgressIndicator(
                             progress = { (state.downloadProgress / 100f).coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            color = ObsidianWhite,
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = ObsidianEmerald,
                             trackColor = ObsidianBorder
                         )
                     }
@@ -272,20 +285,20 @@ fun ObsidianUpdateDialog(
                             containerColor = ObsidianWhite,
                             contentColor = ObsidianDarkest
                         ),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(22.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(44.dp)
                     ) {
                         Text(
                             text = "Install & Relaunch →",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             color = ObsidianDarkest
                         )
                     }
                 }
-                // 3. Default: "Update Now →" (#0B0B0E on #FFFFFF button)
+                // 3. Default Idle State: "Later" (text button) and "Update Now" (44dp pill button)
                 else {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -294,8 +307,8 @@ fun ObsidianUpdateDialog(
                     ) {
                         TextButton(
                             onClick = onDismiss,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(48.dp)
+                            shape = RoundedCornerShape(22.dp),
+                            modifier = Modifier.height(44.dp)
                         ) {
                             Text(
                                 text = "Later",
@@ -310,15 +323,15 @@ fun ObsidianUpdateDialog(
                                 containerColor = ObsidianWhite,
                                 contentColor = ObsidianDarkest
                             ),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(22.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .height(44.dp)
                         ) {
                             Text(
-                                text = "Update Now →",
+                                text = "Update Now",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 color = ObsidianDarkest
                             )
                         }
@@ -330,7 +343,8 @@ fun ObsidianUpdateDialog(
 }
 
 /**
- * Extracts and parses bullet points from GitHub release changelog text.
+ * Extracts, sanitizes, and parses bullet points from GitHub release changelog text.
+ * Technical repository, keystore, branch, and commit jargon are thoroughly filtered out.
  */
 private fun parseReleaseNotes(notes: String): List<String> {
     if (notes.isBlank()) {
@@ -341,6 +355,12 @@ private fun parseReleaseNotes(notes: String): List<String> {
         )
     }
 
+    val technicalKeywords = listOf(
+        "github", "repository", "keystore", "signed with", "master", "commit",
+        "merge branch", "pull request", "pr #", "workflow", "ci/cd", "sha-",
+        "gradlew", "dependabot", "release.apk"
+    )
+
     val lines = notes.lines()
         .map { it.trim() }
         .filter { it.isNotBlank() }
@@ -348,6 +368,11 @@ private fun parseReleaseNotes(notes: String): List<String> {
     val extracted = mutableListOf<String>()
     for (line in lines) {
         if (line.startsWith("#")) continue // skip markdown headers
+
+        val lowerLine = line.lowercase(Locale.ROOT)
+        // Skip technical metadata lines
+        if (technicalKeywords.any { lowerLine.contains(it) }) continue
+
         val cleaned = line
             .removePrefix("*")
             .removePrefix("-")
