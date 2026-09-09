@@ -29,6 +29,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun getBookById(id: Long): Book?
 
+    @Query("SELECT * FROM books WHERE LOWER(TRIM(title)) = LOWER(TRIM(:cleanTitle)) LIMIT 1")
+    suspend fun getBookByCleanTitle(cleanTitle: String): Book?
+
     @Query("SELECT * FROM books WHERE id = :id")
     fun observeBookById(id: Long): Flow<Book?>
 

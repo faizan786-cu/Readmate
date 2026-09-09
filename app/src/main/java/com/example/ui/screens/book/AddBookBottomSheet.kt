@@ -438,7 +438,8 @@ fun AddBookBottomSheet(
                             .fillMaxWidth()
                             .background(ErrorBackground, RoundedCornerShape(10.dp))
                             .border(1.dp, Color(0xFF451A1A), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .testTag("add_book_error_banner"),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -447,11 +448,15 @@ fun AddBookBottomSheet(
                                 fontSize = 11.sp,
                                 color = ErrorText
                             ),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("add_book_error_text")
                         )
                         IconButton(
                             onClick = viewModel::clearError,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier
+                                .size(20.dp)
+                                .testTag("dismiss_error_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,

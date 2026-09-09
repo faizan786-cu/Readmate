@@ -15,6 +15,7 @@ import com.example.data.local.security.SecureApiKeyStorage
 import com.example.data.pdf.PdfStorageManager
 import com.example.data.repository.BookRepository
 import com.example.data.repository.ChapterRepository
+import com.example.data.worker.CoverExtractionWorker
 import com.example.data.worker.ExtractChaptersWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -151,6 +152,15 @@ class BookFormViewModel(
 
         viewModelScope.launch {
             try {
+                // Duplicate check
+                val existing = withContext(Dispatchers.IO) {
+                    bookRepository.getBookByCleanTitle(trimmedTitle)
+                }
+                if (existing != null && (bookId == null || existing.id != bookId)) {
+                    titleError = "A book with this title already exists in your library"
+                    return@launch
+                }
+
                 if (bookId != null && bookId > 0) {
                     bookRepository.updateBook(
                         id = bookId,
@@ -175,6 +185,12 @@ class BookFormViewModel(
                             fileName = pdfFileName,
                             totalPages = pdfTotalPages
                         )
+                        CoverExtractionWorker.enqueue(
+                            context = app,
+                            bookId = bookId,
+                            filePath = pdfFilePath!!,
+                            bookTitle = trimmedTitle
+                        )
                     }
 
                     onSuccess(bookId)
@@ -198,6 +214,12 @@ class BookFormViewModel(
                             filePath = pdfFilePath,
                             fileName = pdfFileName,
                             totalPages = pdfTotalPages
+                        )
+                        CoverExtractionWorker.enqueue(
+                            context = app,
+                            bookId = newId,
+                            filePath = pdfFilePath!!,
+                            bookTitle = trimmedTitle
                         )
                     }
 

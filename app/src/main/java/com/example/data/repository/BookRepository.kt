@@ -29,6 +29,8 @@ class BookRepository(
 
     suspend fun getBook(id: Long): Book? = bookDao.getBookById(id)
 
+    suspend fun getBookByCleanTitle(title: String): Book? = bookDao.getBookByCleanTitle(title.trim().lowercase())
+
     suspend fun createBook(
         title: String,
         author: String? = null,

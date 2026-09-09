@@ -21,6 +21,7 @@ import com.example.data.pdf.PdfStorageManager
 import com.example.data.pdf.PdfStructureExtractor
 import com.example.data.repository.BookRepository
 import com.example.data.repository.ChapterRepository
+import com.example.data.worker.CoverExtractionWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -127,6 +128,16 @@ class AddBookViewModel(
 
         viewModelScope.launch {
             try {
+                // 0. Pre-Parse Guard: Check if fallback title matches an existing book in Room
+                val preExisting = withContext(Dispatchers.IO) {
+                    bookRepository.getBookByCleanTitle(fallbackTitle)
+                }
+                if (preExisting != null) {
+                    errorMessage = "This book already exists in your library."
+                    isCreatingBook = false
+                    return@launch
+                }
+
                 val file = File(filePath)
                 val rotationManager = GeminiKeyRotationManager(secureApiKeyStorage)
                 val extractor = PdfStructureExtractor(rotationManager)
@@ -145,6 +156,17 @@ class AddBookViewModel(
                 // 3. Fallback to clean file name if title is null or blank
                 val finalTitle = payload.bookTitle?.trim()?.ifBlank { fallbackTitle } ?: fallbackTitle
                 val finalAuthor = payload.author?.trim()?.ifBlank { null }
+
+                // Post-Parse Guard: If AI identified an alternate title, verify it isn't also a duplicate
+                val existingAlternate = withContext(Dispatchers.IO) {
+                    bookRepository.getBookByCleanTitle(finalTitle)
+                }
+                if (existingAlternate != null) {
+                    errorMessage = "This book already exists in your library."
+                    isCreatingBook = false
+                    return@launch
+                }
+
                 val rawSections = payload.sections.ifEmpty {
                     extractor.createFallbackSections(totalPages, finalTitle)
                 }
@@ -161,6 +183,14 @@ class AddBookViewModel(
                         pdfLastReadPage = 0
                     )
                 }
+
+                // Trigger intelligent background Gemini Vision cover extraction
+                CoverExtractionWorker.enqueue(
+                    context = getApplication(),
+                    bookId = newBookId,
+                    filePath = filePath,
+                    bookTitle = finalTitle
+                )
 
                 // 5. Batch insert payload.sections into Room chapters table mapped to the new bookId
                 withContext(Dispatchers.IO) {
