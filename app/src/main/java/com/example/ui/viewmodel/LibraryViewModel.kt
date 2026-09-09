@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.database.model.BookWithChapterCount
 import com.example.data.repository.BookRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -33,7 +34,7 @@ class LibraryViewModel(
         )
 
     private fun checkAndTriggerMissingCovers(items: List<BookWithChapterCount>) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             for (item in items) {
                 val b = item.book
                 if (b.coverImageUrl.isNullOrBlank() && !attemptedCoverFetchIds.contains(b.id)) {

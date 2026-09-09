@@ -5,8 +5,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerValue
@@ -85,7 +83,11 @@ fun ReadMateNavGraph(
             coroutineScope.launch { drawerState.close() }
             if (currentRoute != Screen.Dashboard.route) {
                 navController.navigate(Screen.Dashboard.route) {
-                    popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    popUpTo(Screen.Dashboard.route) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
@@ -93,7 +95,11 @@ fun ReadMateNavGraph(
             coroutineScope.launch { drawerState.close() }
             if (currentRoute != Screen.Library.route) {
                 navController.navigate(Screen.Library.route) {
+                    popUpTo(Screen.Dashboard.route) {
+                        saveState = true
+                    }
                     launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
@@ -101,7 +107,11 @@ fun ReadMateNavGraph(
             coroutineScope.launch { drawerState.close() }
             if (!currentRoute.startsWith("wordvault")) {
                 navController.navigate(Screen.WordVault.createRoute()) {
+                    popUpTo(Screen.Dashboard.route) {
+                        saveState = true
+                    }
                     launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
@@ -109,7 +119,11 @@ fun ReadMateNavGraph(
             coroutineScope.launch { drawerState.close() }
             if (currentRoute != Screen.Progress.route) {
                 navController.navigate(Screen.Progress.route) {
+                    popUpTo(Screen.Dashboard.route) {
+                        saveState = true
+                    }
                     launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
@@ -117,7 +131,11 @@ fun ReadMateNavGraph(
             coroutineScope.launch { drawerState.close() }
             if (currentRoute != Screen.Settings.route) {
                 navController.navigate(Screen.Settings.route) {
+                    popUpTo(Screen.Dashboard.route) {
+                        saveState = true
+                    }
                     launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
@@ -125,7 +143,11 @@ fun ReadMateNavGraph(
             coroutineScope.launch { drawerState.close() }
             if (currentRoute != Screen.About.route) {
                 navController.navigate(Screen.About.route) {
+                    popUpTo(Screen.Dashboard.route) {
+                        saveState = true
+                    }
                     launchSingleTop = true
+                    restoreState = true
                 }
             }
         },
@@ -139,31 +161,27 @@ fun ReadMateNavGraph(
                 navController = navController,
                 startDestination = startDestination,
                 modifier = modifier,
-            enterTransition = {
-                slideIntoContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(280))
-            },
-            exitTransition = {
-                slideOutOfContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Left,
-                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(240))
-            },
-            popEnterTransition = {
-                slideIntoContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                    animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(280))
-            },
-            popExitTransition = {
-                slideOutOfContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.Right,
-                    animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(240))
-            }
-        ) {
+                enterTransition = {
+                    fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
+                            slideIntoContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                            )
+                },
+                exitTransition = {
+                    fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
+                },
+                popEnterTransition = {
+                    fadeIn(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
+                            slideIntoContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                            )
+                },
+                popExitTransition = {
+                    fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
+                }
+            ) {
             // Dashboard Screen
             composable(route = Screen.Dashboard.route) {
                 DashboardScreen(
@@ -397,31 +415,7 @@ fun ReadMateNavGraph(
                         type = NavType.IntType
                         defaultValue = 0
                     }
-                ),
-                enterTransition = {
-                    fadeIn(animationSpec = tween(250)) + scaleIn(
-                        initialScale = 0.96f,
-                        animationSpec = tween(250, easing = FastOutSlowInEasing)
-                    )
-                },
-                exitTransition = {
-                    fadeOut(animationSpec = tween(200)) + scaleOut(
-                        targetScale = 0.96f,
-                        animationSpec = tween(200, easing = FastOutSlowInEasing)
-                    )
-                },
-                popEnterTransition = {
-                    fadeIn(animationSpec = tween(250)) + scaleIn(
-                        initialScale = 0.96f,
-                        animationSpec = tween(250, easing = FastOutSlowInEasing)
-                    )
-                },
-                popExitTransition = {
-                    fadeOut(animationSpec = tween(200)) + scaleOut(
-                        targetScale = 0.96f,
-                        animationSpec = tween(200, easing = FastOutSlowInEasing)
-                    )
-                }
+                )
             ) { backStackEntry ->
                 val chapterId = backStackEntry.arguments?.getLong("chapterId") ?: -1L
                 val initialIndex = backStackEntry.arguments?.getInt("initialIndex") ?: 0
@@ -560,31 +554,7 @@ fun ReadMateNavGraph(
 
             // Dedicated Full-Page About Screen & Developer Attribution Architecture
             composable(
-                route = Screen.About.route,
-                enterTransition = {
-                    fadeIn(animationSpec = tween(250)) + scaleIn(
-                        initialScale = 0.96f,
-                        animationSpec = tween(250, easing = FastOutSlowInEasing)
-                    )
-                },
-                exitTransition = {
-                    fadeOut(animationSpec = tween(200)) + scaleOut(
-                        targetScale = 0.96f,
-                        animationSpec = tween(200, easing = FastOutSlowInEasing)
-                    )
-                },
-                popEnterTransition = {
-                    fadeIn(animationSpec = tween(250)) + scaleIn(
-                        initialScale = 0.96f,
-                        animationSpec = tween(250, easing = FastOutSlowInEasing)
-                    )
-                },
-                popExitTransition = {
-                    fadeOut(animationSpec = tween(200)) + scaleOut(
-                        targetScale = 0.96f,
-                        animationSpec = tween(200, easing = FastOutSlowInEasing)
-                    )
-                }
+                route = Screen.About.route
             ) {
                 AboutScreen(
                     onBackClick = { navController.popBackStack() }

@@ -101,6 +101,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.ReadMateApplication
 import com.example.data.local.database.entity.WisdomQuote
@@ -694,11 +695,18 @@ private fun HeroCurrentlyReadingCard(
                             .clip(RoundedCornerShape(8.dp))
                     ) {
                         if (!recentBook.coverImageUrl.isNullOrBlank()) {
-                            SubcomposeAsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
+                            val context = LocalContext.current
+                            val coverRequest = remember(recentBook.coverImageUrl) {
+                                ImageRequest.Builder(context)
                                     .data(recentBook.coverImageUrl)
                                     .crossfade(true)
-                                    .build(),
+                                    .memoryCachePolicy(CachePolicy.ENABLED)
+                                    .diskCachePolicy(CachePolicy.ENABLED)
+                                    .allowHardware(true)
+                                    .build()
+                            }
+                            SubcomposeAsyncImage(
+                                model = coverRequest,
                                 contentDescription = "Cover for ${recentBook.title}",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize(),

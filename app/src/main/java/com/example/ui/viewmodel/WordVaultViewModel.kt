@@ -14,6 +14,7 @@ import com.example.data.repository.ChapterMessageRepository
 import com.example.data.repository.ChapterRepository
 import com.example.data.repository.GeminiRepository
 import com.example.data.repository.WordVaultRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -131,7 +133,7 @@ class WordVaultViewModel(
                             entry.originalSentence.lowercase().contains(cleanQuery)
                 }
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),

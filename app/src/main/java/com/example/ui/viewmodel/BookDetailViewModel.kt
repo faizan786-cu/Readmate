@@ -20,6 +20,7 @@ import com.example.data.repository.ChapterRepository
 import com.example.data.repository.QuizRepository
 import com.example.ui.components.PdfExportUiState
 import com.example.ui.navigation.ReaderNavigationGuard
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -87,7 +88,7 @@ class BookDetailViewModel(
         )
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             chapterRepository.purgeJunkChapters()
         }
     }

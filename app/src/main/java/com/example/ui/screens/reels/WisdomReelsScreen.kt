@@ -220,6 +220,7 @@ fun WisdomReelsScreen(
 
             VerticalPager(
                 state = pagerState,
+                key = { pageIndex -> if (pageIndex in quotes.indices) quotes[pageIndex].id else pageIndex },
                 beyondViewportPageCount = 1,
                 modifier = Modifier
                     .fillMaxSize()

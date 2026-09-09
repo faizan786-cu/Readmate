@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.example.R
 import com.example.ReadMateApplication
@@ -385,7 +386,9 @@ private fun BookCard(
                     val imageRequest = remember(book.coverImageUrl) {
                         ImageRequest.Builder(context)
                             .data(book.coverImageUrl)
-                            .crossfade(300)
+                            .crossfade(true)
+                            .memoryCachePolicy(CachePolicy.ENABLED)
+                            .diskCachePolicy(CachePolicy.ENABLED)
                             .setHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile; rv:109.0) Gecko/114.0 Firefox/114.0")
                             .allowHardware(true)
                             .build()
