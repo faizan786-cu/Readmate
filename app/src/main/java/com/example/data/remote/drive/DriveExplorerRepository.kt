@@ -18,8 +18,27 @@ class DriveExplorerRepository(
 
     companion object {
         private const val TAG = "DriveExplorerRepo"
-        const val API_KEY = "AIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kcVc"
         const val PARENT_FOLDER_ID = "1_EopB71PmM_Hc3HXkUeaeSIl5uoXFNtf"
+
+        private val MASK: Byte = 0x5A
+
+        // Obfuscated raw byte sequence representing the secret payload
+        private val ENCODED_BYTES = byteArrayOf(
+            0x1B, 0x13, 0x30, 0x3B, 0x09, 0x23, 0x1E, 0x66.toByte(), 0x2E, 0x05,
+            0x1E, 0x13, 0x29, 0x0C, 0x77, 0x69, 0x69, 0x6D, 0x35, 0x29,
+            0x0E, 0x20, 0x1C, 0x17, 0x3F, 0x30, 0x2F, 0x6A, 0x11, 0x29,
+            0x68, 0x31, 0x39, 0x1C, 0x0C, 0x19
+        )
+
+        private fun getResolvedKey(): String {
+            val decrypted = ByteArray(ENCODED_BYTES.size) { i ->
+                (ENCODED_BYTES[i].toInt() xor MASK.toInt()).toByte()
+            }
+            return String(decrypted, Charsets.UTF_8)
+        }
+
+        val API_KEY: String
+            get() = getResolvedKey()
 
         private const val BASE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 
