@@ -77,6 +77,9 @@ class ReadMateApplication : Application() {
         com.example.data.remote.vault.ApiKeyVaultSyncService()
     }
     val geminiRepository: GeminiRepository by lazy { GeminiRepository(secureApiKeyStorage) }
+    val driveExplorerRepository: com.example.data.remote.drive.DriveExplorerRepository by lazy {
+        com.example.data.remote.drive.DriveExplorerRepository()
+    }
     val quoteExtractionEngine: QuoteExtractionEngine by lazy {
         QuoteExtractionEngine(
             secureStorage = secureApiKeyStorage,

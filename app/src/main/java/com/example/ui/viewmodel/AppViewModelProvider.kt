@@ -25,7 +25,13 @@ object AppViewModelProvider {
         }
         initializer {
             val app = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as ReadMateApplication)
-            LibraryViewModel(app.bookRepository)
+            LibraryViewModel(
+                bookRepository = app.bookRepository,
+                chapterRepository = app.chapterRepository,
+                driveExplorerRepository = app.driveExplorerRepository,
+                secureApiKeyStorage = app.secureApiKeyStorage,
+                application = app
+            )
         }
         initializer {
             val app = (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as ReadMateApplication)
