@@ -13,6 +13,9 @@ data class DriveBookItem(
     val highResCoverUrl: String,
     val iconLink: String? = null
 ) {
+    val coverUrl: String
+        get() = highResCoverUrl
+
     companion object {
         fun fromDriveJson(
             id: String,

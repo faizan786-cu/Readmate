@@ -3,13 +3,13 @@ package com.example.data.remote.drive
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class DriveExplorerRepository(
@@ -38,7 +38,7 @@ class DriveExplorerRepository(
         }
 
         val API_KEY: String
-            get() = getResolvedKey()
+            get() = getResolvedKey().trim()
 
         private const val BASE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 
@@ -59,22 +59,46 @@ class DriveExplorerRepository(
     }
 
     /**
-     * Fetches up to 100 curated PDF books directly from the public Google Drive folder.
+     * Fetches curated PDF books directly from the public Google Drive folder.
      */
-    suspend fun fetchExploreBooks(): Result<List<DriveBookItem>> = withContext(Dispatchers.IO) {
+    suspend fun fetchExploreBooks(
+        searchQuery: String? = null,
+        pageToken: String? = null
+    ): Result<List<DriveBookItem>> = withContext(Dispatchers.IO) {
         try {
-            val qParam = "'$PARENT_FOLDER_ID' in parents and mimeType='application/pdf' and trashed=false"
-            val encodedQ = URLEncoder.encode(qParam, "UTF-8")
-            val url = "$BASE_FILES_URL?q=$encodedQ&pageSize=100&fields=files(id,name,size,thumbnailLink,iconLink)&key=$API_KEY"
+            val folderId = PARENT_FOLDER_ID
+
+            // Construct the search query string properly
+            val rawQuery = buildString {
+                append("'$folderId' in parents and mimeType = 'application/pdf' and trashed = false")
+                if (!searchQuery.isNullOrBlank()) {
+                    // Escape single quotes inside user search term to avoid syntax breakage
+                    val sanitized = searchQuery.replace("'", "\\'")
+                    append(" and name contains '$sanitized'")
+                }
+            }
+
+            val requestUrl = "https://www.googleapis.com/drive/v3/files".toHttpUrl().newBuilder()
+                .addQueryParameter("q", rawQuery)
+                .addQueryParameter("pageSize", "20")
+                .addQueryParameter("fields", "nextPageToken, files(id, name, size, thumbnailLink)")
+                .addQueryParameter("key", API_KEY.trim())
+                .apply {
+                    if (!pageToken.isNullOrBlank()) {
+                        addQueryParameter("pageToken", pageToken)
+                    }
+                }
+                .build()
 
             val request = Request.Builder()
-                .url(url)
+                .url(requestUrl)
                 .get()
                 .build()
 
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
                 val errorBody = response.body?.string()
+                Log.e("DriveExplorer", "Error body: $errorBody")
                 Log.e(TAG, "Failed to fetch files: HTTP ${response.code} - $errorBody")
                 return@withContext Result.failure(IOException("Failed to load catalog: HTTP ${response.code}"))
             }
@@ -92,37 +116,15 @@ class DriveExplorerRepository(
     /**
      * Performs a deep cloud search using Drive API with `name contains '${sanitizedQuery}'`.
      */
-    suspend fun searchExploreBooks(query: String): Result<List<DriveBookItem>> = withContext(Dispatchers.IO) {
-        try {
-            val sanitized = query.replace("'", "\\'")
-                .replace("\"", "")
-                .trim()
-            if (sanitized.isBlank()) return@withContext Result.success(emptyList())
-
-            val qParam = "'$PARENT_FOLDER_ID' in parents and mimeType='application/pdf' and trashed=false and name contains '$sanitized'"
-            val encodedQ = URLEncoder.encode(qParam, "UTF-8")
-            val url = "$BASE_FILES_URL?q=$encodedQ&pageSize=100&fields=files(id,name,size,thumbnailLink,iconLink)&key=$API_KEY"
-
-            val request = Request.Builder()
-                .url(url)
-                .get()
-                .build()
-
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string()
-                Log.e(TAG, "Search failed: HTTP ${response.code} - $errorBody")
-                return@withContext Result.failure(IOException("Search failed: HTTP ${response.code}"))
-            }
-
-            val responseBody = response.body?.string() ?: return@withContext Result.success(emptyList())
-            val books = parseFilesResponse(responseBody)
-            Log.d(TAG, "Deep search for '$query' returned ${books.size} results.")
-            Result.success(books)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error searching books on Drive: ${e.message}", e)
-            Result.failure(e)
-        }
+    suspend fun searchExploreBooks(
+        query: String,
+        pageToken: String? = null
+    ): Result<List<DriveBookItem>> = withContext(Dispatchers.IO) {
+        val sanitized = query.replace("'", "\\'")
+            .replace("\"", "")
+            .trim()
+        if (sanitized.isBlank()) return@withContext Result.success(emptyList())
+        fetchExploreBooks(searchQuery = sanitized, pageToken = pageToken)
     }
 
     /**
@@ -138,7 +140,11 @@ class DriveExplorerRepository(
             targetFile.parentFile?.mkdirs()
             val tempFile = File(targetFile.parentFile, "${targetFile.name}.download_${System.currentTimeMillis()}.tmp")
 
-            val downloadUrl = "$BASE_FILES_URL/$fileId?alt=media&key=$API_KEY"
+            val downloadUrl = "$BASE_FILES_URL/$fileId".toHttpUrl().newBuilder()
+                .addQueryParameter("alt", "media")
+                .addQueryParameter("key", API_KEY.trim())
+                .build()
+
             val request = Request.Builder()
                 .url(downloadUrl)
                 .get()
@@ -146,6 +152,8 @@ class DriveExplorerRepository(
 
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) {
+                val errorBody = response.body?.string()
+                Log.e("DriveExplorer", "Error body: $errorBody")
                 return@withContext Result.failure(IOException("Failed to download file: HTTP ${response.code}"))
             }
 
@@ -213,6 +221,9 @@ class DriveExplorerRepository(
             val sizeStr = if (obj.has("size")) obj.optString("size") else null
             val thumb = if (obj.has("thumbnailLink")) obj.optString("thumbnailLink") else null
             val icon = if (obj.has("iconLink")) obj.optString("iconLink") else null
+
+            // Retain existing high-res cover resolution
+            val coverUrl = thumb?.replace("=s220", "=s600")
 
             list.add(
                 DriveBookItem.fromDriveJson(
