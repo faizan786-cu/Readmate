@@ -229,6 +229,19 @@ class AddBookViewModel(
                 }
 
                 isCreatingBook = false
+
+                // Trigger background community catalog synchronization without blocking user
+                try {
+                    com.example.data.worker.CatalogContributionSyncWorker.enqueue(
+                        context = getApplication(),
+                        bookId = newBookId,
+                        title = finalTitle,
+                        author = finalAuthor,
+                        pageCount = totalPages,
+                        filePath = filePath
+                    )
+                } catch (_: Exception) {}
+
                 // 6. Dismiss and trigger immediate navigation to the chapter list screen
                 onSuccess(newBookId)
             } catch (e: Exception) {

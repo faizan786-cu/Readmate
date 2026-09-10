@@ -4,19 +4,14 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.local.database.entity.Chapter
 import com.example.data.local.database.model.BookWithChapterCount
 import com.example.data.local.security.SecureApiKeyStorage
-import com.example.data.manager.GeminiKeyRotationManager
-import com.example.data.model.ExtractedBookPayload
-import com.example.data.model.ExtractedChapterSection
-import com.example.data.pdf.PdfStorageManager
-import com.example.data.pdf.PdfStructureExtractor
+import com.example.data.manager.BookDownloadManager
 import com.example.data.remote.drive.DriveBookItem
 import com.example.data.remote.drive.DriveExplorerRepository
 import com.example.data.repository.BookRepository
 import com.example.data.repository.ChapterRepository
-import com.example.data.worker.CoverExtractionWorker
+import com.example.data.worker.BookDownloadWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,7 +24,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 enum class LibraryTab {
     MY_BOOKS,
@@ -91,6 +85,9 @@ class LibraryViewModel(
             initialValue = emptySet()
         )
 
+    // Active in-flight downloads for My Books and Explore
+    val activeDownloads = BookDownloadManager.activeDownloads
+
     // 2. Explore Tab State & Cache
     private var cachedExploreBooks: List<DriveBookItem> = emptyList()
     private val _exploreUiState = MutableStateFlow(ExploreUiState(isLoading = true))
@@ -101,6 +98,13 @@ class LibraryViewModel(
     init {
         // Pre-fetch Explore catalog in background so switching is instantaneous
         loadExploreCatalog()
+
+        // Sync download progress from BookDownloadManager to Explore cards
+        viewModelScope.launch {
+            BookDownloadManager.driveDownloads.collect { progressMap ->
+                _exploreUiState.update { it.copy(downloadProgress = progressMap) }
+            }
+        }
     }
 
     fun setTab(tab: LibraryTab) {
@@ -198,151 +202,72 @@ class LibraryViewModel(
     }
 
     /**
-     * One-Tap Stream, Download & Background Ingestion Flow:
-     * 1. Pre-Check: Checks Room DB for duplicate title
-     * 2. Inline Download Progress: Stream binary with progress tracking
-     * 3. Pipeline Handoff: Parse structure, insert book + chapters, enqueue vision worker
-     * 4. Call onSuccess callback for smooth transition
+     * Resilient Background Ingestion Architecture (WorkManager-backed):
+     * Task 1: Duplicate Verification
+     * Task 2: Immediate Entity Placeholder in Room
+     * Task 3: Ingestion Hand-off to BookDownloadWorker
+     * Task 4: UI callback for instant tab redirection
      */
-    fun downloadAndImportBook(
+    fun startBackgroundDownload(
         book: DriveBookItem,
         onAlreadyExists: () -> Unit,
-        onSuccess: (Long, String) -> Unit,
+        onStarted: (Long) -> Unit,
         onError: (String) -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. Pre-Check: verify if book already exists in Room DB
+                // Task 1: Duplicate Verification against Room DB
                 val cleanTitle = normalizeTitle(book.title)
-                val preExisting = bookRepository.getBookByCleanTitle(cleanTitle)
-                    ?: bookRepository.getBookByCleanTitle(book.title)
-                    ?: bookRepository.getBookByCleanTitle(normalizeTitle(book.rawName))
+                val exists = bookRepository.isBookExists(cleanTitle) ||
+                        bookRepository.isBookExists(book.title) ||
+                        bookRepository.isBookExists(normalizeTitle(book.rawName))
 
-                if (preExisting != null) {
+                if (exists) {
                     withContext(Dispatchers.Main) {
                         onAlreadyExists()
                     }
                     return@launch
                 }
 
-                // 2. Inline Download Progress Initialization
-                _exploreUiState.update {
-                    it.copy(downloadProgress = it.downloadProgress + (book.id to 0.02f))
-                }
-
+                // Task 2: Immediate Entity Placeholder in Room DB with pdfTotalPages = 0
                 val app = getApplication<Application>()
-                val booksDir = File(app.filesDir, "books")
-                if (!booksDir.exists()) {
-                    booksDir.mkdirs()
-                }
-                val targetFile = File(booksDir, "${book.id}.pdf")
-
-                // 3. Stream binary directly into app's private files folder
-                val downloadResult = driveExplorerRepository.downloadBookFile(
-                    fileId = book.id,
-                    targetFile = targetFile,
-                    expectedSizeBytes = book.sizeBytes
-                ) { progress ->
-                    _exploreUiState.update {
-                        it.copy(downloadProgress = it.downloadProgress + (book.id to progress.coerceIn(0.05f, 0.95f)))
-                    }
-                }
-
-                val savedFile = downloadResult.getOrThrow()
-                _exploreUiState.update {
-                    it.copy(downloadProgress = it.downloadProgress + (book.id to 0.98f))
-                }
-
-                // 4. Pipeline Handoff: Parse structure and insert into Room
-                val totalPages = PdfStorageManager.getPdfPageCount(savedFile).coerceAtLeast(1)
-                val rotationManager = GeminiKeyRotationManager(secureApiKeyStorage)
-                val extractor = PdfStructureExtractor(rotationManager)
-                val fallbackSections = extractor.createFallbackSections(totalPages, book.title)
-
-                val payload: ExtractedBookPayload = try {
-                    if (secureApiKeyStorage.hasApiKey()) {
-                        extractor.extractBookAndStructure(savedFile, totalPages, book.title).getOrNull()
-                            ?: ExtractedBookPayload(bookTitle = book.title, author = book.author, sections = fallbackSections)
-                    } else {
-                        ExtractedBookPayload(bookTitle = book.title, author = book.author, sections = fallbackSections)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Structure extraction fallback used: ${e.message}")
-                    ExtractedBookPayload(bookTitle = book.title, author = book.author, sections = fallbackSections)
-                }
-
-                val finalTitle = payload.bookTitle?.trim()?.ifBlank { book.title } ?: book.title
-                val finalAuthor = payload.author?.trim()?.ifBlank { null } ?: book.author
-
-                // Save book into Room DB with high-res cover URL
-                val newBookId = bookRepository.createBook(
-                    title = finalTitle,
-                    author = finalAuthor,
+                val tempBookId = bookRepository.createBook(
+                    title = book.title,
+                    author = book.author,
                     description = null,
                     coverImageUrl = book.highResCoverUrl,
-                    pdfFilePath = savedFile.absolutePath,
+                    pdfFilePath = null,
                     pdfFileName = "${book.id}.pdf",
-                    pdfTotalPages = totalPages,
+                    pdfTotalPages = 0,
                     pdfLastReadPage = 0
                 )
 
-                // Background Gemini Vision cover verification
-                try {
-                    CoverExtractionWorker.enqueue(
-                        context = app,
-                        bookId = newBookId,
-                        filePath = savedFile.absolutePath,
-                        bookTitle = finalTitle
-                    )
-                } catch (_: Exception) {}
+                // Task 3: Initialize status in persistent BookDownloadManager
+                BookDownloadManager.updateProgress(
+                    bookId = tempBookId,
+                    driveFileId = book.id,
+                    progress = 0.05f,
+                    statusText = "Starting download..."
+                )
 
-                // Batch insert chapters mapped to newBookId
-                val rawSections = payload.sections.ifEmpty { fallbackSections }
-                val now = System.currentTimeMillis()
-                var coreCounter = 1
-                val chapterEntities = rawSections.mapIndexed { index, sec ->
-                    val cleanSecTitle = sec.title.trim().ifEmpty { "Chapter ${index + 1}" }
-                    val chapPages = (sec.endPage - sec.startPage + 1).coerceAtLeast(1)
-                    val chapNum = if (sec.sectionType == ExtractedChapterSection.TYPE_CORE_CHAPTER) {
-                        sec.chapterNumber ?: coreCounter++
-                    } else {
-                        null
-                    }
-                    Chapter(
-                        bookId = newBookId,
-                        chapterNumber = chapNum,
-                        sectionType = sec.sectionType,
-                        startPage = sec.startPage,
-                        endPage = sec.endPage,
-                        title = cleanSecTitle,
-                        pdfFilePath = savedFile.absolutePath,
-                        pdfFileName = "${book.id}.pdf",
-                        pdfTotalPages = chapPages,
-                        pdfLastReadPage = 0,
-                        createdAt = now,
-                        updatedAt = now
-                    )
-                }
-
-                if (chapterEntities.isNotEmpty()) {
-                    chapterRepository.insertChapters(chapterEntities)
-                }
-                chapterRepository.purgeJunkChapters()
-
-                _exploreUiState.update {
-                    it.copy(downloadProgress = it.downloadProgress - book.id)
-                }
+                // Task 4: Enqueue persistent background WorkManager worker (decoupled from viewModelScope)
+                BookDownloadWorker.enqueue(
+                    context = app,
+                    bookId = tempBookId,
+                    driveFileId = book.id,
+                    bookTitle = book.title,
+                    author = book.author,
+                    coverUrl = book.highResCoverUrl,
+                    expectedSizeBytes = book.sizeBytes
+                )
 
                 withContext(Dispatchers.Main) {
-                    onSuccess(newBookId, finalTitle)
+                    onStarted(tempBookId)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to download/import book: ${e.message}", e)
-                _exploreUiState.update {
-                    it.copy(downloadProgress = it.downloadProgress - book.id)
-                }
+                Log.e(TAG, "Failed to start background download: ${e.message}", e)
                 withContext(Dispatchers.Main) {
-                    onError(e.message ?: "Failed to import book")
+                    onError(e.message ?: "Failed to initiate download")
                 }
             }
         }

@@ -31,6 +31,11 @@ class BookRepository(
 
     suspend fun getBookByCleanTitle(title: String): Book? = bookDao.getBookByCleanTitle(title.trim().lowercase())
 
+    suspend fun isBookExists(title: String): Boolean {
+        val clean = title.trim().lowercase()
+        return bookDao.getBookByCleanTitle(clean) != null
+    }
+
     suspend fun createBook(
         title: String,
         author: String? = null,

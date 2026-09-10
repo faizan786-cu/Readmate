@@ -64,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -132,6 +133,7 @@ fun LibraryScreen(
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val exploreUiState by viewModel.exploreUiState.collectAsStateWithLifecycle()
     val importedTitles by viewModel.importedTitles.collectAsStateWithLifecycle()
+    val activeDownloads by viewModel.activeDownloads.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val app = context.applicationContext as ReadMateApplication
@@ -140,9 +142,66 @@ fun LibraryScreen(
 
     var showAddBookSheet by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var pendingExploreBook by remember { mutableStateOf<DriveBookItem?>(null) }
+
+    // Surface background download worker events (completion/failure notifications)
+    LaunchedEffect(Unit) {
+        com.example.data.manager.BookDownloadManager.events.collect { eventMsg ->
+            if (!eventMsg.isNullOrBlank()) {
+                snackbarHostState.showSnackbar(
+                    message = eventMsg,
+                    duration = SnackbarDuration.Short
+                )
+                com.example.data.manager.BookDownloadManager.clearEvent()
+            }
+        }
+    }
+
+    fun initiateExploreDownload(book: DriveBookItem) {
+        viewModel.startBackgroundDownload(
+            book = book,
+            onAlreadyExists = {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Book already exists in your library",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            },
+            onStarted = {
+                // Section 3: Instantly redirect to "My Books" tab
+                viewModel.setTab(LibraryTab.MY_BOOKS)
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Adding \"${book.title}\" to your library...",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            },
+            onError = { errorMsg ->
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Download error: $errorMsg",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        )
+    }
+
+    // Section 2: API Key Pre-Flight Interception
+    fun handleExploreAddBookTap(book: DriveBookItem) {
+        if (!app.secureApiKeyStorage.hasApiKey()) {
+            pendingExploreBook = book
+            showApiKeyDialog = true
+        } else {
+            initiateExploreDownload(book)
+        }
+    }
 
     fun handleAddBookTap() {
         if (!app.secureApiKeyStorage.hasApiKey()) {
+            pendingExploreBook = null
             showApiKeyDialog = true
         } else {
             showAddBookSheet = true
@@ -152,14 +211,29 @@ fun LibraryScreen(
     if (showApiKeyDialog) {
         ApiKeySetupDialog(
             isOpen = true,
-            onDismiss = { showApiKeyDialog = false },
+            onDismiss = {
+                showApiKeyDialog = false
+                pendingExploreBook = null
+            },
             onSuccess = {
                 showApiKeyDialog = false
-                showAddBookSheet = true
+                val pending = pendingExploreBook
+                pendingExploreBook = null
+                if (pending != null) {
+                    initiateExploreDownload(pending)
+                } else {
+                    showAddBookSheet = true
+                }
             },
             onKeySaved = {
                 showApiKeyDialog = false
-                showAddBookSheet = true
+                val pending = pendingExploreBook
+                pendingExploreBook = null
+                if (pending != null) {
+                    initiateExploreDownload(pending)
+                } else {
+                    showAddBookSheet = true
+                }
             },
             secureStorage = app.secureApiKeyStorage,
             userPreferencesRepository = app.userPreferencesRepository
@@ -259,7 +333,6 @@ fun LibraryScreen(
                 LibrarySegmentedTabs(
                     selectedTab = selectedTab,
                     myBooksCount = myBooksCount,
-                    exploreCount = exploreUiState.totalCount,
                     onTabSelected = { viewModel.setTab(it) }
                 )
             }
@@ -336,6 +409,7 @@ fun LibraryScreen(
                             } else {
                                 LibraryContentView(
                                     books = state.books,
+                                    activeDownloads = activeDownloads,
                                     onBookClick = onNavigateToBookDetail,
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -351,39 +425,7 @@ fun LibraryScreen(
                         exploreUiState = exploreUiState,
                         importedTitles = importedTitles,
                         onSearchQueryChanged = { viewModel.onSearchQueryChanged(it) },
-                        onAddBookClick = { book ->
-                            viewModel.downloadAndImportBook(
-                                book = book,
-                                onAlreadyExists = {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            message = "Book already exists in your library",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                    }
-                                },
-                                onSuccess = { newBookId, bookTitle ->
-                                    coroutineScope.launch {
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "\"$bookTitle\" added to your library",
-                                            actionLabel = "Go to Library",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) {
-                                            viewModel.setTab(LibraryTab.MY_BOOKS)
-                                        }
-                                    }
-                                },
-                                onError = { errorMsg ->
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            message = "Failed to add book: $errorMsg",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                    }
-                                }
-                            )
-                        },
+                        onAddBookClick = { book -> handleExploreAddBookTap(book) },
                         onRetryClick = { viewModel.loadExploreCatalog(forceRefresh = true) },
                         modifier = Modifier
                             .fillMaxSize()
@@ -404,7 +446,6 @@ fun LibraryScreen(
 private fun LibrarySegmentedTabs(
     selectedTab: LibraryTab,
     myBooksCount: Int,
-    exploreCount: Int,
     onTabSelected: (LibraryTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -466,7 +507,7 @@ private fun LibrarySegmentedTabs(
                 }
             }
 
-            // "Explore" Tab
+            // "Explore" Tab - Clean typography without numeric counter
             val isExplore = selectedTab == LibraryTab.EXPLORE
             Surface(
                 modifier = Modifier
@@ -499,23 +540,6 @@ private fun LibrarySegmentedTabs(
                         ),
                         color = if (isExplore) PrimaryWhite else SecondaryGray
                     )
-                    if (exploreCount > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isExplore) FineBorderColor else Color(0xFF18181D)
-                        ) {
-                            Text(
-                                text = "$exploreCount",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp
-                                ),
-                                color = if (isExplore) PrimaryWhite else TertiaryGray,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -619,7 +643,7 @@ private fun ExploreContentView(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             val countLabel = if (exploreUiState.searchQuery.isBlank()) {
-                "${exploreUiState.totalCount} Curated Cloud Titles"
+                "Curated Cloud Catalog"
             } else {
                 "${exploreUiState.books.size} ${if (exploreUiState.books.size == 1) "result" else "results"} found"
             }
@@ -1135,6 +1159,7 @@ private fun rememberObsidianShimmerBrush(): Brush {
 @Composable
 private fun LibraryContentView(
     books: List<BookWithChapterCount>,
+    activeDownloads: Map<Long, com.example.data.manager.DownloadProgress>,
     onBookClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1171,9 +1196,17 @@ private fun LibraryContentView(
         }
 
         items(books, key = { it.book.id }) { item ->
+            val downloadInfo = activeDownloads[item.book.id]
+            val isDownloading = downloadInfo != null || (item.book.pdfTotalPages == 0 && item.book.pdfFilePath.isNullOrBlank())
             BookCard(
                 bookWithCount = item,
-                onClick = { onBookClick(item.book.id) },
+                downloadProgress = downloadInfo,
+                isDownloading = isDownloading,
+                onClick = {
+                    if (!isDownloading) {
+                        onBookClick(item.book.id)
+                    }
+                },
                 modifier = Modifier.testTag("book_card_${item.book.id}")
             )
         }
@@ -1182,13 +1215,15 @@ private fun LibraryContentView(
 
 /**
  * Modern Full-Width Book Card for "My Books":
- * Left: Sleek Book thumbnail with proportional 2:3 aspect ratio
- * Center: Title, author, and chapter count / progress badges
+ * Left: Sleek Book thumbnail with proportional 2:3 aspect ratio (or obsidian shimmer skeleton when importing)
+ * Center: Title, author, and chapter count / progress badges / active download status
  * Right: Circular progress indicator + subtle chevron navigation arrow
  */
 @Composable
 private fun BookCard(
     bookWithCount: BookWithChapterCount,
+    downloadProgress: com.example.data.manager.DownloadProgress?,
+    isDownloading: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1198,12 +1233,13 @@ private fun BookCard(
     val totalPages = book.pdfTotalPages
     val highestReadPage = book.pdfLastReadPage
     val progressFraction = if (totalPages > 0) (highestReadPage.toFloat() / totalPages.toFloat()).coerceIn(0f, 1f) else 0f
+    val shimmerBrush = rememberObsidianShimmerBrush()
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .clickable(enabled = !isDownloading, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurfaceBg),
         border = BorderStroke(1.dp, FineBorderColor),
@@ -1215,7 +1251,7 @@ private fun BookCard(
                 .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Book Cover Thumbnail
+            // Left: Book Cover Thumbnail (with shimmer skeleton during background ingestion)
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = CardSurfaceTertiary,
@@ -1246,20 +1282,26 @@ private fun BookCard(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(CardSurfaceTertiary),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                    contentDescription = null,
-                                    tint = SecondaryGray.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
+                                    .background(shimmerBrush)
+                            )
                         },
                         error = {
-                            BookSpinePlaceholder(title = book.title, modifier = Modifier.fillMaxSize())
+                            if (isDownloading) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(shimmerBrush)
+                                )
+                            } else {
+                                BookSpinePlaceholder(title = book.title, modifier = Modifier.fillMaxSize())
+                            }
                         }
+                    )
+                } else if (isDownloading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(shimmerBrush)
                     )
                 } else {
                     BookSpinePlaceholder(title = book.title, modifier = Modifier.fillMaxSize())
@@ -1281,7 +1323,7 @@ private fun BookCard(
                         letterSpacing = (-0.2).sp
                     ),
                     color = PrimaryWhite,
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
@@ -1312,60 +1354,94 @@ private fun BookCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                if (isDownloading) {
+                    // Task 3: Identical native progress indicator and status text
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = CardSurfaceTertiary,
                         border = BorderStroke(0.8.dp, FineBorderColor)
                     ) {
-                        Text(
-                            text = if (chapterCount == 1) "1 Chapter" else "$chapterCount Chapters",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            ),
-                            color = MutedWhite,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-
-                    if (hasPdf && totalPages > 0) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = CardSurfaceSecondary,
-                            border = BorderStroke(0.8.dp, FineBorderColor)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.5.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            CircularProgressIndicator(
+                                progress = { downloadProgress?.progress ?: 0.05f },
+                                strokeWidth = 2.dp,
+                                color = PrimaryWhite,
+                                trackColor = FineBorderColor,
+                                modifier = Modifier.size(12.dp)
+                            )
                             Text(
-                                text = "$highestReadPage / $totalPages pages",
+                                text = downloadProgress?.statusText ?: "Processing PDF...",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 ),
-                                color = SecondaryGray,
+                                color = MutedWhite,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = CardSurfaceTertiary,
+                            border = BorderStroke(0.8.dp, FineBorderColor)
+                        ) {
+                            Text(
+                                text = if (chapterCount == 1) "1 Chapter" else "$chapterCount Chapters",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = MutedWhite,
                                 maxLines = 1,
                                 softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
+                        }
+
+                        if (hasPdf && totalPages > 0) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = CardSurfaceSecondary,
+                                border = BorderStroke(0.8.dp, FineBorderColor)
+                            ) {
+                                Text(
+                                    text = "$highestReadPage / $totalPages pages",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = SecondaryGray,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // Right: Donut chart and chevron
+            // Right: Donut chart & chevron
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(start = 10.dp)
             ) {
-                if (hasPdf && totalPages > 0) {
+                if (isDownloading) {
+                    val activeFrac = downloadProgress?.progress ?: 0.05f
                     DonutProgressChart(
-                        progress = progressFraction,
+                        progress = activeFrac,
                         size = 36.dp,
                         strokeWidth = 3.5.dp,
                         progressColors = listOf(
@@ -1381,13 +1457,33 @@ private fun BookCard(
                         ),
                         testTag = "book_donut_chart_${book.id}"
                     )
+                } else {
+                    if (hasPdf && totalPages > 0) {
+                        DonutProgressChart(
+                            progress = progressFraction,
+                            size = 36.dp,
+                            strokeWidth = 3.5.dp,
+                            progressColors = listOf(
+                                PrimaryWhite,
+                                Color(0xFFE4E4E7),
+                                Color(0xFFD4D4D8)
+                            ),
+                            trackColor = Color(0xFF27272A),
+                            textColor = PrimaryWhite,
+                            textStyle = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.5.sp
+                            ),
+                            testTag = "book_donut_chart_${book.id}"
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "View Book",
+                        tint = SecondaryGray.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "View Book",
-                    tint = SecondaryGray.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
     }
