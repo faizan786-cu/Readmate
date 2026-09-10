@@ -43,35 +43,20 @@ data class DriveBookItem(
             )
         }
 
-        fun parseTitleAndAuthor(rawName: String): Pair<String, String?> {
-            var text = rawName
-            if (text.endsWith(".pdf", ignoreCase = true)) {
-                text = text.substring(0, text.length - 4)
+        fun parseTitleAndAuthor(rawFileName: String): Pair<String, String> {
+            val cleanName = rawFileName.removeSuffix(".pdf").replace("_", " ").trim()
+            return if (cleanName.contains(" - ")) {
+                val parts = cleanName.split(" - ", limit = 2)
+                Pair(parts[0].trim(), parts[1].trim())
+            } else if (cleanName.contains(" -- ")) {
+                val parts = cleanName.split(" -- ", limit = 2)
+                Pair(parts[0].trim(), parts[1].trim())
+            } else if (cleanName.contains(" by ", ignoreCase = true)) {
+                val parts = cleanName.split(" by ", ignoreCase = true, limit = 2)
+                Pair(parts[0].trim(), parts[1].trim())
+            } else {
+                Pair(cleanName, "Community Upload")
             }
-            text = text.replace('_', ' ')
-            text = text.replace("\\s+".toRegex(), " ").trim()
-
-            // 1. Pattern with " -- " separator (common in library datasets)
-            if (text.contains(" -- ")) {
-                val segments = text.split(" -- ")
-                val cleanTitle = segments[0].trim()
-                val authorSegment = segments.getOrNull(1)?.trim()
-                val cleanAuthor = if (authorSegment != null && !authorSegment.matches("^\\d{4}$".toRegex())) {
-                    authorSegment
-                } else null
-                return Pair(cleanTitle.ifBlank { "Untitled Document" }, cleanAuthor)
-            }
-
-            // 2. Pattern with " by " separator
-            if (text.contains(" by ", ignoreCase = true)) {
-                val parts = text.split(" by ", ignoreCase = true, limit = 2)
-                val cleanTitle = parts[0].trim()
-                val cleanAuthor = parts.getOrNull(1)?.trim()
-                return Pair(cleanTitle.ifBlank { "Untitled Document" }, cleanAuthor)
-            }
-
-            // 3. Fallback clean title
-            return Pair(text.ifBlank { "Untitled Document" }, null)
         }
 
         fun formatSize(bytes: Long?): String {

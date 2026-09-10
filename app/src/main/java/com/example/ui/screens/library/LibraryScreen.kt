@@ -934,22 +934,25 @@ private fun ExploreBookCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Author if present
-            if (!book.author.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = book.author,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Normal
-                    ),
-                    color = TertiaryGray,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            // Author Subtitle: #71717A, FontWeight.Normal, 12sp, formatted as "by $author"
+            val authorDisplay = if (!book.author.isNullOrBlank()) {
+                val clean = book.author.trim()
+                if (clean.startsWith("by ", ignoreCase = true)) clean else "by $clean"
             } else {
-                Spacer(modifier = Modifier.height(2.dp))
+                "by Community Upload"
             }
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = authorDisplay,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    lineHeight = 16.sp
+                ),
+                color = TertiaryGray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 

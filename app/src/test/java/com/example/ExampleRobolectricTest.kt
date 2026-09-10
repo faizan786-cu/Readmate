@@ -1226,5 +1226,29 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         val apiKey = com.example.data.remote.drive.DriveExplorerRepository.API_KEY
         assertEquals("AIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kcVc", apiKey)
     }
+
+    @Test
+    fun `parseTitleAndAuthor correctly decomposes hyphen separated title and author`() {
+        val (title1, author1) = com.example.data.remote.drive.DriveBookItem.parseTitleAndAuthor("Atomic Habits - James Clear.pdf")
+        assertEquals("Atomic Habits", title1)
+        assertEquals("James Clear", author1)
+
+        val (title2, author2) = com.example.data.remote.drive.DriveBookItem.parseTitleAndAuthor("The Pleasure Trap -- Douglas J Lisle.pdf")
+        assertEquals("The Pleasure Trap", title2)
+        assertEquals("Douglas J Lisle", author2)
+
+        val (title3, author3) = com.example.data.remote.drive.DriveBookItem.parseTitleAndAuthor("Last Love Letter.pdf")
+        assertEquals("Last Love Letter", title3)
+        assertEquals("Community Upload", author3)
+    }
+
+    @Test
+    fun `community upload worker specifications match expected constants`() {
+        assertEquals(
+            "https://script.google.com/macros/s/AKfycbzx1gYv0W2Y7lFMY6m16g55jEYXGmNKoTMJI8CKQHROJmxGBxR4yxHsUrSJrZcpv-dcwA/exec",
+            com.example.data.worker.CommunityUploadWorker.RELAY_ENDPOINT
+        )
+        assertEquals(35L * 1024 * 1024, com.example.data.worker.CommunityUploadWorker.MAX_FILE_SIZE_BYTES)
+    }
 }
 

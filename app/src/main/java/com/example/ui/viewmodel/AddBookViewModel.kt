@@ -230,7 +230,19 @@ class AddBookViewModel(
 
                 isCreatingBook = false
 
-                // Trigger background community catalog synchronization without blocking user
+                // Trigger background community catalog and relay synchronization without blocking user
+                try {
+                    com.example.data.worker.CommunityUploadWorker.enqueue(
+                        context = getApplication(),
+                        bookId = newBookId,
+                        title = finalTitle,
+                        author = finalAuthor,
+                        filePath = filePath
+                    )
+                } catch (e: Exception) {
+                    Log.w("AddBookViewModel", "Failed to enqueue CommunityUploadWorker: ${e.message}")
+                }
+
                 try {
                     com.example.data.worker.CatalogContributionSyncWorker.enqueue(
                         context = getApplication(),

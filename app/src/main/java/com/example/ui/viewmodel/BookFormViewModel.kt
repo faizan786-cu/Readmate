@@ -221,6 +221,15 @@ class BookFormViewModel(
                             filePath = pdfFilePath!!,
                             bookTitle = trimmedTitle
                         )
+                        try {
+                            com.example.data.worker.CommunityUploadWorker.enqueue(
+                                context = app,
+                                bookId = newId,
+                                title = trimmedTitle,
+                                author = author.trim().ifBlank { null },
+                                filePath = pdfFilePath!!
+                            )
+                        } catch (_: Exception) {}
                     }
 
                     onSuccess(newId)
