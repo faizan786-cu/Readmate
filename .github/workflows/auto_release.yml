@@ -97,24 +97,41 @@ jobs:
           echo "VERSION_TAG=v1.0.${BUILD_NUM}" >> $GITHUB_ENV
           echo "VERSION_NAME=Release v1.0.${BUILD_NUM}" >> $GITHUB_ENV
 
-      - name: Find APK File
-        id: find_apk
+      - name: Find, Rename and Prepare Release Binaries
+        id: prep_apk
         run: |
-          APK_PATH=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "ERROR: APK file not found!"
+          ORIGINAL_APK=$(find app/build/outputs/apk/ -name "*.apk" | head -n 1)
+          if [ -z "$ORIGINAL_APK" ]; then
+            echo "ERROR: Compiled APK file not found!"
             exit 1
           fi
-          echo "Found APK at: $APK_PATH"
-          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
+          echo "Found source APK at: $ORIGINAL_APK"
+
+          # 1. Versioned APK: ReadMate-v1.0.XX.apk
+          VERSIONED_APK="ReadMate-${{ env.VERSION_TAG }}.apk"
+          cp "$ORIGINAL_APK" "./$VERSIONED_APK"
+
+          # 2. Static Universal APK for permanent web routing: ReadMate.apk
+          cp "$ORIGINAL_APK" "./ReadMate.apk"
+
+          echo "Prepared artifacts:"
+          ls -lh ReadMate*
+
+          echo "VERSIONED_APK_PATH=./$VERSIONED_APK" >> $GITHUB_ENV
+          echo "STATIC_APK_PATH=./ReadMate.apk" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.APK_PATH }}
+          files: |
+            ${{ env.VERSIONED_APK_PATH }}
+            ${{ env.STATIC_APK_PATH }}
           tag_name: ${{ env.VERSION_TAG }}
           name: ${{ env.VERSION_NAME }}
-          body: "Automated build ${{ env.VERSION_TAG }} signed with master repository secret key."
+          body: |
+            ### ReadMate Automated Release - ${{ env.VERSION_TAG }}
+            * Universal production APK built with R8 tree-shaking and on-device Room SQLite engine.
+            * Signed with repository keystore.
           draft: false
           prerelease: false
         env:
