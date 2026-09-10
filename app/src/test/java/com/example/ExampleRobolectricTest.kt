@@ -1220,5 +1220,11 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         viewModel.onConfirmPasswordResetClicked {}
         assertEquals("Passwords do not match.", viewModel.uiState.value.errorMessage)
     }
+
+    @Test
+    fun `drive explorer repository obfuscated api key decodes to valid expected drive key`() {
+        val apiKey = com.example.data.remote.drive.DriveExplorerRepository.API_KEY
+        assertEquals("AIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kcVc", apiKey)
+    }
 }
 
