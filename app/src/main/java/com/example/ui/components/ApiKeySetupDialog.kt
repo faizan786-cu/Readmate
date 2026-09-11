@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
@@ -43,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -73,6 +76,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.local.security.SecureApiKeyStorage
 import com.example.data.manager.ApiKeyValidationResult
 import com.example.data.manager.ApiKeyValidator
@@ -156,6 +162,8 @@ fun ApiKeySetupDialog(
     var inputKey by remember { mutableStateOf("") }
     var validationState by remember { mutableStateOf<ApiKeyValidationResult>(ApiKeyValidationResult.Idle) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     fun triggerValidation() {
         val trimmed = inputKey.trim()
         if (trimmed.isEmpty()) {
@@ -167,6 +175,41 @@ fun ApiKeySetupDialog(
         coroutineScope.launch {
             val result = validator.validateKey(trimmed)
             validationState = result
+        }
+    }
+
+    fun checkAndAutofillClipboard() {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                ?: return
+            if (!clipboard.hasPrimaryClip()) return
+            val item = clipboard.primaryClip?.getItemAt(0) ?: return
+            val rawText = item.text?.toString()?.trim() ?: return
+
+            val apiKeyRegex = Regex("^AIzaSy[A-Za-z0-9_-]{33}$")
+            if (!apiKeyRegex.matches(rawText)) return
+
+            if (inputKey.isBlank()) {
+                inputKey = rawText
+                try {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                } catch (_: Exception) {}
+                triggerValidation()
+            }
+        } catch (_: Exception) {
+            // Silently ignore clipboard exceptions
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                checkAndAutofillClipboard()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -280,26 +323,43 @@ fun ApiKeySetupDialog(
                             )
                         }
 
-                        Text(
-                            text = "Get API Key ↗",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = TextWhite,
-                            modifier = Modifier
-                                .clickable {
-                                    try {
-                                        val intent = Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse("https://aistudio.google.com/api-keys")
-                                        )
-                                        context.startActivity(intent)
-                                    } catch (_: Exception) { }
-                                }
-                                .padding(4.dp)
-                                .testTag("get_api_key_link")
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Visual Guide ↗",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = TextMutedSilver,
+                                modifier = Modifier
+                                    .clickable { openVisualGuide(context) }
+                                    .padding(4.dp)
+                                    .testTag("visual_guide_link")
+                            )
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            Text(
+                                text = "Get API Key ↗",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = TextWhite,
+                                modifier = Modifier
+                                    .clickable {
+                                        try {
+                                            val intent = Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse("https://aistudio.google.com/api-keys")
+                                            )
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) { }
+                                    }
+                                    .padding(4.dp)
+                                    .testTag("get_api_key_link")
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

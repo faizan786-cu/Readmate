@@ -1250,5 +1250,27 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         )
         assertEquals(35L * 1024 * 1024, com.example.data.worker.CommunityUploadWorker.MAX_FILE_SIZE_BYTES)
     }
+
+    @Test
+    fun `clipboard autofill api key regex strictly validates standard 39 character AI Studio keys`() {
+        val apiKeyRegex = Regex("^AIzaSy[A-Za-z0-9_-]{33}$")
+
+        // Valid 39-char keys starting with AIzaSy
+        assertTrue(apiKeyRegex.matches("AIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kcVc"))
+        assertTrue(apiKeyRegex.matches("AIzaSyABCDEF1234567890_-abcdefghijklmno"))
+
+        // Invalid keys
+        assertFalse(apiKeyRegex.matches("AIzaSyTooShort"))
+        assertFalse(apiKeyRegex.matches("NotAIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kcVc"))
+        assertFalse(apiKeyRegex.matches("AIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kcVcTooLong123"))
+        assertFalse(apiKeyRegex.matches("AIzaSyDLt_DISeV-7307osTzFMEejuq0Ks8kc!@#")) // invalid chars
+        assertFalse(apiKeyRegex.matches(""))
+    }
+
+    @Test
+    fun `openVisualGuide helper launches safely without unhandled exceptions`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        com.example.ui.components.openVisualGuide(context)
+    }
 }
 

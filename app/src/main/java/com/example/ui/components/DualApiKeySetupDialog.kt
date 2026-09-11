@@ -1,8 +1,10 @@
 package com.example.ui.components
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,6 +28,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Visibility
@@ -41,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,11 +53,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +74,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.local.security.SecureApiKeyStorage
 import com.example.data.manager.ApiKeyValidationResult
 import com.example.data.manager.ApiKeyValidator
@@ -74,6 +85,34 @@ import com.example.data.repository.UserPreferencesRepository
 import com.example.ReadMateApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
+/**
+ * Custom Tab / Browser launcher helper for the ReadMate Visual Guide.
+ */
+fun openVisualGuide(context: Context) {
+    try {
+        val intent = CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .build()
+        intent.launchUrl(context, Uri.parse("https://readmate.ai.studio/#guide"))
+    } catch (_: Exception) {
+        try {
+            val fallback = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://readmate.ai.studio/#guide")
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(fallback)
+        } catch (_: Exception) {
+            Toast.makeText(
+                context,
+                "Unable to open visual guide",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+}
 
 // Strict Monochrome Palette
 private val DialogSurface = Color(0xFF141418)
@@ -176,6 +215,62 @@ fun DualApiKeySetupDialog(
         }
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val haptic = LocalHapticFeedback.current
+    val secondaryFocusRequester = remember { FocusRequester() }
+    var isGuideBannerDismissed by remember { mutableStateOf(false) }
+
+    fun checkAndAutofillClipboard() {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                ?: return
+            if (!clipboard.hasPrimaryClip()) return
+            val item = clipboard.primaryClip?.getItemAt(0) ?: return
+            val rawText = item.text?.toString()?.trim() ?: return
+
+            val apiKeyRegex = Regex("^AIzaSy[A-Za-z0-9_-]{33}$")
+            if (!apiKeyRegex.matches(rawText)) return
+
+            if (primaryKey.isBlank()) {
+                primaryKey = rawText
+                if (primaryStatus !is KeyVerificationStatus.Unverified) {
+                    primaryStatus = KeyVerificationStatus.Unverified
+                }
+                try {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                } catch (_: Exception) {}
+                scope.launch {
+                    try {
+                        secondaryFocusRequester.requestFocus()
+                    } catch (_: Exception) {}
+                }
+            } else if (secondaryKey.isBlank() && rawText != primaryKey) {
+                secondaryKey = rawText
+                if (secondaryStatus !is KeyVerificationStatus.Unverified) {
+                    secondaryStatus = KeyVerificationStatus.Unverified
+                }
+                try {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                } catch (_: Exception) {}
+                verifyKey(rawText, isPrimary = false)
+            }
+        } catch (_: Exception) {
+            // Guard against any security or platform clipboard exceptions
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                checkAndAutofillClipboard()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // Determine verification count and activation eligibility
     val isPrimaryVerified = primaryStatus is KeyVerificationStatus.Verified
     val isSecondaryVerified = secondaryStatus is KeyVerificationStatus.Verified
@@ -213,15 +308,44 @@ fun DualApiKeySetupDialog(
                     .fillMaxWidth()
                     .padding(24.dp)
             ) {
-                // Title
-                Text(
-                    text = "Configure Intelligence Engine",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = CrispWhite
-                )
+                // Title and Top-Right Quick Pill
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Configure Intelligence Engine",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = CrispWhite,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF1F1F24),
+                        border = BorderStroke(1.dp, SlateBorder),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { openVisualGuide(context) }
+                            .testTag("visual_guide_quick_pill")
+                    ) {
+                        Text(
+                            text = "Visual Guide ↗",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = CrispWhite,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -272,6 +396,54 @@ fun DualApiKeySetupDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // First-Time Hint Callout (Contextual Banner)
+                AnimatedVisibility(
+                    visible = !isGuideBannerDismissed,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF141418),
+                        border = BorderStroke(1.dp, SlateBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                isGuideBannerDismissed = true
+                                openVisualGuide(context)
+                            }
+                            .testTag("first_time_guide_banner")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Visual Guide",
+                                tint = CrispWhite,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "First time? Tap here to see our 1-minute visual guide with screenshots.",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = CrispWhite,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Input Box 1: Primary Gemini Key
@@ -313,7 +485,8 @@ fun DualApiKeySetupDialog(
                         focusManager.clearFocus()
                         verifyKey(secondaryKey, isPrimary = false)
                     },
-                    testTagPrefix = "secondary_api_key"
+                    testTagPrefix = "secondary_api_key",
+                    focusRequester = secondaryFocusRequester
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -448,7 +621,8 @@ private fun KeyInputField(
     onToggleVisibility: () -> Unit,
     status: KeyVerificationStatus,
     onTriggerVerify: () -> Unit,
-    testTagPrefix: String
+    testTagPrefix: String,
+    focusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -517,6 +691,7 @@ private fun KeyInputField(
                         cursorBrush = SolidColor(CrispWhite),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                             .onFocusChanged { isFocused = it.isFocused }
                             .testTag("${testTagPrefix}_input")
                     )
