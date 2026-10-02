@@ -4,12 +4,35 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
+data class GeminiThinkingConfig(
+    @Json(name = "thinkingBudget") val thinkingBudget: Int? = 0
+)
+
+@JsonClass(generateAdapter = true)
 data class GeminiGenerationConfig(
     @Json(name = "temperature") val temperature: Float? = null,
     @Json(name = "topP") val topP: Float? = null,
     @Json(name = "maxOutputTokens") val maxOutputTokens: Int? = null,
-    @Json(name = "responseMimeType") val responseMimeType: String? = null
-)
+    @Json(name = "responseMimeType") val responseMimeType: String? = null,
+    @Json(name = "thinkingConfig") val thinkingConfig: GeminiThinkingConfig? = null
+) {
+    companion object {
+        /**
+         * Low-latency generation parameters with thinking budget disabled (0)
+         * to prioritize instant streaming responsiveness over deep-reasoning wait times.
+         */
+        fun lowLatency(
+            maxOutputTokens: Int = 2048,
+            temperature: Float? = 0.3f,
+            responseMimeType: String? = null
+        ): GeminiGenerationConfig = GeminiGenerationConfig(
+            temperature = temperature,
+            maxOutputTokens = maxOutputTokens,
+            responseMimeType = responseMimeType,
+            thinkingConfig = GeminiThinkingConfig(thinkingBudget = 0)
+        )
+    }
+}
 
 @JsonClass(generateAdapter = true)
 data class GeminiGenerateContentRequest(
@@ -18,7 +41,11 @@ data class GeminiGenerateContentRequest(
     @Json(name = "generationConfig") val generationConfig: GeminiGenerationConfig? = null
 ) {
     companion object {
-        fun forText(prompt: String): GeminiGenerateContentRequest {
+        fun forText(
+            prompt: String,
+            systemInstruction: String? = null,
+            generationConfig: GeminiGenerationConfig? = GeminiGenerationConfig.lowLatency()
+        ): GeminiGenerateContentRequest {
             val cleanPrompt = prompt.trim()
             require(cleanPrompt.isNotEmpty()) { "Prompt text cannot be empty" }
             return GeminiGenerateContentRequest(
@@ -26,14 +53,19 @@ data class GeminiGenerateContentRequest(
                     GeminiContent(
                         parts = listOf(GeminiPart(text = cleanPrompt))
                     )
-                )
+                ),
+                systemInstruction = systemInstruction?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    GeminiContent(parts = listOf(GeminiPart(text = it)))
+                },
+                generationConfig = generationConfig
             )
         }
 
         fun forVision(
             prompt: String,
             base64Data: String,
-            mimeType: String = "image/jpeg"
+            mimeType: String = "image/jpeg",
+            systemInstruction: String? = null
         ): GeminiGenerateContentRequest {
             val cleanPrompt = prompt.trim()
             val cleanBase64 = base64Data.trim()
@@ -63,6 +95,13 @@ data class GeminiGenerateContentRequest(
                     GeminiContent(
                         parts = partsList
                     )
+                ),
+                systemInstruction = systemInstruction?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    GeminiContent(parts = listOf(GeminiPart(text = it)))
+                },
+                generationConfig = GeminiGenerationConfig.lowLatency(
+                    maxOutputTokens = 2048,
+                    temperature = 0.1f
                 )
             )
         }
@@ -101,7 +140,8 @@ data class GeminiGenerateContentRequest(
                 systemInstruction = GeminiContent(
                     parts = listOf(GeminiPart(text = systemPrompt.trim()))
                 ),
-                generationConfig = GeminiGenerationConfig(
+                generationConfig = GeminiGenerationConfig.lowLatency(
+                    maxOutputTokens = 2500,
                     temperature = 0.1f,
                     responseMimeType = "application/json"
                 )
@@ -121,7 +161,8 @@ data class GeminiGenerateContentRequest(
                 systemInstruction = GeminiContent(
                     parts = listOf(GeminiPart(text = systemPrompt.trim()))
                 ),
-                generationConfig = GeminiGenerationConfig(
+                generationConfig = GeminiGenerationConfig.lowLatency(
+                    maxOutputTokens = 2500,
                     temperature = 0.1f,
                     responseMimeType = "application/json"
                 )
@@ -164,4 +205,3 @@ data class GeminiCandidate(
 data class GeminiPromptFeedback(
     @Json(name = "blockReason") val blockReason: String? = null
 )
-

@@ -677,6 +677,7 @@ fun ChapterChatScreen(
                                         pageNumber = pageNum,
                                         statusLabel = statusLabel,
                                         placeholderHeadline = headline,
+                                        streamingText = activeJob?.streamingText.orEmpty(),
                                         isError = isErrorState,
                                         onRetry = { viewModel.retryLastExplanation() },
                                         onCancel = { showCancelGenerationDialog = true },
@@ -1150,17 +1151,28 @@ private fun ChapterProvisionalEntryCard(
     pageNumber: Int?,
     statusLabel: String,
     placeholderHeadline: String = "Analyzing Core Insight...",
+    streamingText: String = "",
     isError: Boolean = false,
     onRetry: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(enabled = isError && onRetry != null, onClick = { onRetry?.invoke() })
+            .clickable(
+                enabled = (isError && onRetry != null) || streamingText.isNotBlank(),
+                onClick = {
+                    if (isError && onRetry != null) {
+                        onRetry.invoke()
+                    } else if (streamingText.isNotBlank()) {
+                        isExpanded = !isExpanded
+                    }
+                }
+            )
             .testTag("timeline_provisional_entry_card"),
         shape = RoundedCornerShape(12.dp),
         color = Color(0xFF141418),
@@ -1293,7 +1305,7 @@ private fun ChapterProvisionalEntryCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = placeholderHeadline,
+                        text = if (streamingText.isNotBlank()) "Generating Core Insight (Live)..." else placeholderHeadline,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isError) Color(0xFFFFFFFF) else Color(0xFFFFFFFF).copy(alpha = breathingAlpha),
@@ -1303,20 +1315,56 @@ private fun ChapterProvisionalEntryCard(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = if (isError) {
-                        "Generation interrupted. Tap anywhere to retry or cancel from the menu."
-                    } else {
-                        "Analyzing passage and synthesizing core understanding with Gemini AI..."
-                    },
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp,
-                    color = Color(0xFFA1A1AA),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (streamingText.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF0D0D10),
+                        border = BorderStroke(1.dp, Color(0xFF27272F)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(Color(0xFF10B981), shape = CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isExpanded) "LIVE RESPONSE (Tap to collapse)" else "LIVE RESPONSE (Tap to expand)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF10B981),
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = streamingText,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                color = Color(0xFFE4E4E7),
+                                maxLines = if (isExpanded) Int.MAX_VALUE else 5,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (isError) {
+                            "Generation interrupted. Tap anywhere to retry or cancel from the menu."
+                        } else {
+                            "Analyzing passage and synthesizing core understanding with Gemini AI..."
+                        },
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = Color(0xFFA1A1AA),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             // Bottom Edge Indicator: LinearProgressIndicator when loading, red hairline when error

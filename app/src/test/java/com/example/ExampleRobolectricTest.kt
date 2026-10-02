@@ -377,16 +377,16 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
 
         assertTrue(result.isSuccess)
         assertEquals("Success from Key 2", result.getOrNull())
-        // key1 tried all 3 passage models (P1 to P3), then rotated to key2 (P1)
-        assertEquals(4, callCount)
-        assertTrue(attemptedCalls.count { it.first == key1.key } == 3)
-        assertTrue(attemptedCalls.count { it.first == key2.key } == 1)
+        // Model-First Cross-Key Cascade: key1 tried primary model (gemini-3.8-flash), hit 429, rotated immediately to key2 on same primary model!
+        assertEquals(2, callCount)
+        assertEquals(1, attemptedCalls.count { it.first == key1.key })
+        assertEquals(1, attemptedCalls.count { it.first == key2.key })
 
-        // Verify key1 encountered 429 errors and key2 succeeded
+        // Verify key1 encountered 429 error and key2 succeeded
         val keysAfter = manager.getApiKeys()
         val k1 = keysAfter.first { it.id == key1.id }
         val k2 = keysAfter.first { it.id == key2.id }
-        assertEquals(3, k1.rateLimitErrors429)
+        assertEquals(1, k1.rateLimitErrors429)
         assertEquals(com.example.data.model.KeyStatus.ACTIVE, k2.status)
         assertEquals(1, k2.successfulRequests)
     }
@@ -464,6 +464,15 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
                 apiKey: String,
                 request: com.example.data.remote.gemini.GeminiGenerateContentRequest
             ): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                val json404 = """{"error":{"code":404,"message":"models/gemini-old is not found for API version v1beta","status":"NOT_FOUND"}}"""
+                return retrofit2.Response.error(404, okhttp3.ResponseBody.create(null, json404))
+            }
+
+            override suspend fun streamGenerateContent(
+                model: String,
+                apiKey: String,
+                request: com.example.data.remote.gemini.GeminiGenerateContentRequest
+            ): retrofit2.Response<okhttp3.ResponseBody> {
                 val json404 = """{"error":{"code":404,"message":"models/gemini-old is not found for API version v1beta","status":"NOT_FOUND"}}"""
                 return retrofit2.Response.error(404, okhttp3.ResponseBody.create(null, json404))
             }
@@ -556,41 +565,102 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
 
     @Test
     fun `gemini model pools match task-specific specifications and order`() {
-        // Translation Pool
+        // Translation Pool (Lightweight Utility Tier)
         val transPool = com.example.data.model.GeminiModelRegistry.TRANSLATION_POOL
-        assertEquals(2, transPool.size)
-        assertEquals("gemini-3.1-flash-lite", transPool[0].modelId)
+        assertEquals(3, transPool.size)
+        assertEquals("gemini-3.5-flash-lite", transPool[0].modelId)
         assertEquals(1, transPool[0].priority)
         assertEquals(500, transPool[0].rpd)
         assertEquals(15, transPool[0].rpm)
         assertEquals(com.example.data.model.GeminiTaskType.WORD_TRANSLATION, transPool[0].taskType)
 
-        assertEquals("gemini-3.5-flash-lite", transPool[1].modelId)
+        assertEquals("gemini-3.1-flash-lite", transPool[1].modelId)
         assertEquals(2, transPool[1].priority)
         assertEquals(500, transPool[1].rpd)
         assertEquals(15, transPool[1].rpm)
         assertEquals(com.example.data.model.GeminiTaskType.WORD_TRANSLATION, transPool[1].taskType)
 
-        // Passage Analysis Pool
+        assertEquals("gemini-2.5-flash-lite", transPool[2].modelId)
+        assertEquals(3, transPool[2].priority)
+        assertEquals(500, transPool[2].rpd)
+        assertEquals(15, transPool[2].rpm)
+        assertEquals(com.example.data.model.GeminiTaskType.WORD_TRANSLATION, transPool[2].taskType)
+
+        // Passage Analysis Pool (Heavy Analysis Tier)
         val passagePool = com.example.data.model.GeminiModelRegistry.PASSAGE_POOL
-        assertEquals(3, passagePool.size)
-        assertEquals("gemini-3.6-flash", passagePool[0].modelId)
+        assertEquals(5, passagePool.size)
+        assertEquals("gemini-3.8-flash", passagePool[0].modelId)
         assertEquals(1, passagePool[0].priority)
         assertEquals(20, passagePool[0].rpd)
         assertEquals(5, passagePool[0].rpm)
         assertEquals(com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS, passagePool[0].taskType)
 
-        assertEquals("gemini-3.5-flash", passagePool[1].modelId)
+        assertEquals("gemini-3.6-flash", passagePool[1].modelId)
         assertEquals(2, passagePool[1].priority)
         assertEquals(20, passagePool[1].rpd)
         assertEquals(5, passagePool[1].rpm)
         assertEquals(com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS, passagePool[1].taskType)
 
-        assertEquals("gemini-3.7-flash", passagePool[2].modelId)
+        assertEquals("gemini-3.5-flash", passagePool[2].modelId)
         assertEquals(3, passagePool[2].priority)
         assertEquals(20, passagePool[2].rpd)
         assertEquals(5, passagePool[2].rpm)
         assertEquals(com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS, passagePool[2].taskType)
+
+        assertEquals("gemini-3-flash-preview", passagePool[3].modelId)
+        assertEquals(4, passagePool[3].priority)
+        assertEquals(20, passagePool[3].rpd)
+        assertEquals(5, passagePool[3].rpm)
+        assertEquals(com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS, passagePool[3].taskType)
+
+        assertEquals("gemini-2.5-flash", passagePool[4].modelId)
+        assertEquals(5, passagePool[4].priority)
+        assertEquals(20, passagePool[4].rpd)
+        assertEquals(5, passagePool[4].rpm)
+        assertEquals(com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS, passagePool[4].taskType)
+    }
+
+    @Test
+    fun `model-first cross-key cascade tests top priority model across keys before step-down`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+
+        val key1 = storage.addApiKey("AIzaSyFakeKeyCascade1", "Key 1")
+        val key2 = storage.addApiKey("AIzaSyFakeKeyCascade2", "Key 2")
+        assertNotNull(key1)
+        assertNotNull(key2)
+
+        val manager = com.example.data.manager.GeminiApiKeyManager(
+            secureStorage = storage
+        )
+
+        val attemptedCalls = mutableListOf<Pair<String, String>>() // Key, Model
+
+        // Key 1 hits 429 on gemini-3.8-flash; Key 2 succeeds on gemini-3.8-flash!
+        val result = manager.executeWithAutoRotation<String>(
+            taskType = com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS,
+            operationName = "test_cascade"
+        ) { apiKey, model ->
+            attemptedCalls.add(apiKey to model)
+            if (apiKey == key1!!.key && model == "gemini-3.8-flash") {
+                val errorBody = okhttp3.ResponseBody.create(
+                    null,
+                    """{"error": {"code": 429, "message": "Resource has been exhausted", "status": "RESOURCE_EXHAUSTED"}}"""
+                )
+                retrofit2.Response.error(429, errorBody)
+            } else {
+                retrofit2.Response.success("Success with $model on key")
+            }
+        }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Success with gemini-3.8-flash on key", result.getOrNull())
+
+        // Verified Model-First: Attempted top-priority model on Key 1, then rotated to Key 2 on SAME model
+        assertEquals(2, attemptedCalls.size)
+        assertEquals(key1!!.key to "gemini-3.8-flash", attemptedCalls[0])
+        assertEquals(key2!!.key to "gemini-3.8-flash", attemptedCalls[1])
     }
 
     @Test
@@ -608,13 +678,13 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
 
         val attemptedCalls = mutableListOf<Pair<String, String>>() // Key, Model
 
-        // Simulate Word Translation: Key1 Priority 1 (3.1-lite) returns 429, Priority 2 (3.5-lite) succeeds!
+        // Simulate Word Translation: Key1 Priority 1 (3.5-lite) returns 429, Priority 2 (3.1-lite) succeeds!
         val result = manager.executeWithAutoRotation<String>(
             taskType = com.example.data.model.GeminiTaskType.WORD_TRANSLATION,
             operationName = "test"
         ) { apiKey, model ->
             attemptedCalls.add(apiKey to model)
-            if (apiKey == key1!!.key && model == "gemini-3.1-flash-lite") {
+            if (apiKey == key1!!.key && model == "gemini-3.5-flash-lite") {
                 val errorBody = okhttp3.ResponseBody.create(
                     null,
                     """{"error": {"code": 429, "message": "Resource has been exhausted", "status": "RESOURCE_EXHAUSTED"}}"""
@@ -626,16 +696,16 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         }
 
         assertTrue(result.isSuccess)
-        assertEquals("Translation result using model: gemini-3.5-flash-lite", result.getOrNull())
+        assertEquals("Translation result using model: gemini-3.1-flash-lite", result.getOrNull())
 
         // Verify that it stepped down on the SAME key within the translation pool
         assertEquals(2, attemptedCalls.size)
-        assertEquals(key1!!.key to "gemini-3.1-flash-lite", attemptedCalls[0])
-        assertEquals(key1.key to "gemini-3.5-flash-lite", attemptedCalls[1])
+        assertEquals(key1!!.key to "gemini-3.5-flash-lite", attemptedCalls[0])
+        assertEquals(key1.key to "gemini-3.1-flash-lite", attemptedCalls[1])
     }
 
     @Test
-    fun `passage analysis task uses passage pool starting with gemini-3-6-flash and isolates cooldown`() = runBlocking {
+    fun `passage analysis task uses passage pool starting with gemini-3-8-flash and isolates cooldown`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
         storage.clearAllApiKeys()
@@ -647,12 +717,12 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
             secureStorage = storage
         )
 
-        // First, trigger a 429 on translation model gemini-3.1-flash-lite
+        // First, trigger a 429 on translation model gemini-3.5-flash-lite
         manager.executeWithAutoRotation<String>(
             taskType = com.example.data.model.GeminiTaskType.WORD_TRANSLATION,
             operationName = "test_trans"
         ) { apiKey, model ->
-            if (model == "gemini-3.1-flash-lite") {
+            if (model == "gemini-3.5-flash-lite") {
                 val errorBody = okhttp3.ResponseBody.create(
                     null,
                     """{"error": {"code": 429, "message": "Resource has been exhausted", "status": "RESOURCE_EXHAUSTED"}}"""
@@ -665,7 +735,7 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
 
         val attemptedPassageCalls = mutableListOf<String>()
 
-        // Now run Passage Analysis on the same key: it MUST start with gemini-3.6-flash (not in cooldown!)
+        // Now run Passage Analysis on the same key: it MUST start with gemini-3.8-flash (not in cooldown!)
         val passageResult = manager.executeWithAutoRotation<String>(
             taskType = com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS,
             operationName = "test_passage"
@@ -675,8 +745,8 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         }
 
         assertTrue(passageResult.isSuccess)
-        assertEquals(listOf("gemini-3.6-flash"), attemptedPassageCalls)
-        assertEquals("Passage analysis ok with gemini-3.6-flash", passageResult.getOrNull())
+        assertEquals(listOf("gemini-3.8-flash"), attemptedPassageCalls)
+        assertEquals("Passage analysis ok with gemini-3.8-flash", passageResult.getOrNull())
     }
 
     @Test
@@ -778,11 +848,13 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         val visionModels = com.example.data.model.GeminiModelRegistry.getModelsForTask(
             com.example.data.model.GeminiTaskType.VISION_EXTRACTION
         )
-        assertEquals(2, visionModels.size)
-        assertEquals("gemini-3.1-flash-lite", visionModels[0].modelId)
-        assertEquals("gemini-3.5-flash-lite", visionModels[1].modelId)
+        assertEquals(3, visionModels.size)
+        assertEquals("gemini-3.5-flash-lite", visionModels[0].modelId)
+        assertEquals("gemini-3.1-flash-lite", visionModels[1].modelId)
+        assertEquals("gemini-2.5-flash-lite", visionModels[2].modelId)
         assertEquals(1, visionModels[0].priority)
         assertEquals(2, visionModels[1].priority)
+        assertEquals(3, visionModels[2].priority)
     }
 
     @Test

@@ -3,13 +3,16 @@ package com.example.data.model
 import com.squareup.moshi.JsonClass
 
 /**
- * Two fundamentally different Gemini AI workloads:
- * - WORD_TRANSLATION: Fast, high-volume lightweight word/sentence translations (Flash-Lite models)
- * - PASSAGE_ANALYSIS: Deep, high-quality full passage explanations and lessons (Flash models)
+ * Workload categories across ReadMate:
+ * - PASSAGE_ANALYSIS: Heavy Analysis Tier (Flash Pipeline) dedicated exclusively to Chapter Chat passage explanations & takeaways
+ * - WORD_TRANSLATION, WISDOM_QUOTE, MCQ_SYNTHESIS, PDF_PARSING, VISION_EXTRACTION: Lightweight Utility Tier (Flash-Lite Pipeline)
  */
 enum class GeminiTaskType {
-    WORD_TRANSLATION,
     PASSAGE_ANALYSIS,
+    WORD_TRANSLATION,
+    WISDOM_QUOTE,
+    MCQ_SYNTHESIS,
+    PDF_PARSING,
     VISION_EXTRACTION
 }
 
@@ -23,8 +26,18 @@ data class GeminiModelInfo(
     val priority: Int,
     val rpd: Int, // Requests Per Day
     val rpm: Int, // Requests Per Minute
-    val taskType: GeminiTaskType = GeminiTaskType.PASSAGE_ANALYSIS
-)
+    val taskType: GeminiTaskType = GeminiTaskType.PASSAGE_ANALYSIS,
+    val retirementTimestampEpochMs: Long? = null
+) {
+    /**
+     * Epoch-Based Sunset Validation:
+     * Validates model availability dynamically at runtime against retirement timestamps so
+     * deprecated models are silently omitted from the pipeline without throwing HTTP 404 errors.
+     */
+    fun isRetired(currentTime: Long = System.currentTimeMillis()): Boolean {
+        return retirementTimestampEpochMs != null && currentTime >= retirementTimestampEpochMs
+    }
+}
 
 enum class ModelQuotaState {
     PENDING,
@@ -54,41 +67,73 @@ data class ModelTestResult(
 )
 
 object GeminiModelRegistry {
+    // Epoch timestamp for gemini-3.1-flash-lite retirement: May 7, 2027 00:00:00 UTC
+    const val RETIREMENT_GEMINI_3_1_FLASH_LITE_MS: Long = 1809648000000L
+
     /**
-     * Task A: Word / Sentence Translation Models (Fast, High-Volume Lightweight)
-     * Priority 1: gemini-3.1-flash-lite (500 RPD, 15 RPM)
-     * Priority 2: gemini-3.5-flash-lite (500 RPD, 15 RPM)
+     * Lightweight Utility Tier (Flash-Lite Pipeline):
+     * Dedicated exclusively to high-frequency tasks: Word translations, Wisdom quote extraction,
+     * scenario MCQ generation, and PDF document parsing.
+     *
+     * Exact model ladder in priority order:
+     * 1. gemini-3.5-flash-lite (Primary fast utility)
+     * 2. gemini-3.1-flash-lite (Secondary fast utility, active until May 7, 2027)
+     * 3. gemini-2.5-flash-lite (Emergency fast fallback, active until its announced sunset date)
      */
     val TRANSLATION_POOL: List<GeminiModelInfo> = listOf(
         GeminiModelInfo(
-            modelId = "gemini-3.1-flash-lite",
-            displayName = "Gemini 3.1 Flash Lite",
+            modelId = "gemini-3.5-flash-lite",
+            displayName = "Gemini 3.5 Flash Lite",
             priority = 1,
             rpd = 500,
             rpm = 15,
             taskType = GeminiTaskType.WORD_TRANSLATION
         ),
         GeminiModelInfo(
-            modelId = "gemini-3.5-flash-lite",
-            displayName = "Gemini 3.5 Flash Lite",
+            modelId = "gemini-3.1-flash-lite",
+            displayName = "Gemini 3.1 Flash Lite",
             priority = 2,
+            rpd = 500,
+            rpm = 15,
+            taskType = GeminiTaskType.WORD_TRANSLATION,
+            retirementTimestampEpochMs = RETIREMENT_GEMINI_3_1_FLASH_LITE_MS
+        ),
+        GeminiModelInfo(
+            modelId = "gemini-2.5-flash-lite",
+            displayName = "Gemini 2.5 Flash Lite",
+            priority = 3,
             rpd = 500,
             rpm = 15,
             taskType = GeminiTaskType.WORD_TRANSLATION
         )
     )
 
+    val UTILITY_POOL: List<GeminiModelInfo> = TRANSLATION_POOL
+
     /**
-     * Task B: Full Passage Analysis Models (Quality, Deep Explanation & Mentorship)
-     * Priority 1: gemini-3.6-flash (20 RPD, 5 RPM) - Confirmed stable
-     * Priority 2: gemini-3.5-flash (20 RPD, 5 RPM) - Confirmed stable fallback
-     * Priority 3: gemini-3.7-flash (20 RPD, 5 RPM) - Tertiary fallback
+     * Heavy Analysis Tier (Flash Pipeline):
+     * Dedicated exclusively to Chapter Chat passage explanations and deep takeaways.
+     *
+     * Exact model ladder in priority order:
+     * 1. gemini-3.8-flash (Primary production workhorse)
+     * 2. gemini-3.6-flash (First fallback)
+     * 3. gemini-3.5-flash (Secondary fallback)
+     * 4. gemini-3-flash-preview (Preview tier fallback)
+     * 5. gemini-2.5-flash (Emergency legacy fallback, active until its announced sunset date)
      */
     val PASSAGE_POOL: List<GeminiModelInfo> = listOf(
         GeminiModelInfo(
+            modelId = "gemini-3.8-flash",
+            displayName = "Gemini 3.8 Flash",
+            priority = 1,
+            rpd = 20,
+            rpm = 5,
+            taskType = GeminiTaskType.PASSAGE_ANALYSIS
+        ),
+        GeminiModelInfo(
             modelId = "gemini-3.6-flash",
             displayName = "Gemini 3.6 Flash",
-            priority = 1,
+            priority = 2,
             rpd = 20,
             rpm = 5,
             taskType = GeminiTaskType.PASSAGE_ANALYSIS
@@ -96,15 +141,23 @@ object GeminiModelRegistry {
         GeminiModelInfo(
             modelId = "gemini-3.5-flash",
             displayName = "Gemini 3.5 Flash",
-            priority = 2,
+            priority = 3,
             rpd = 20,
             rpm = 5,
             taskType = GeminiTaskType.PASSAGE_ANALYSIS
         ),
         GeminiModelInfo(
-            modelId = "gemini-3.7-flash",
-            displayName = "Gemini 3.7 Flash",
-            priority = 3,
+            modelId = "gemini-3-flash-preview",
+            displayName = "Gemini 3 Flash Preview",
+            priority = 4,
+            rpd = 20,
+            rpm = 5,
+            taskType = GeminiTaskType.PASSAGE_ANALYSIS
+        ),
+        GeminiModelInfo(
+            modelId = "gemini-2.5-flash",
+            displayName = "Gemini 2.5 Flash",
+            priority = 5,
             rpd = 20,
             rpm = 5,
             taskType = GeminiTaskType.PASSAGE_ANALYSIS
@@ -112,18 +165,30 @@ object GeminiModelRegistry {
     )
 
     /**
-     * Complete list of all models across both task pools.
+     * Complete list of all models across both tiers.
      */
     val ALL_MODELS: List<GeminiModelInfo> = TRANSLATION_POOL + PASSAGE_POOL
     val PRIORITY_POOL: List<GeminiModelInfo> = ALL_MODELS
 
-    val DEFAULT_TRANSLATION_MODEL: String = TRANSLATION_POOL.first().modelId
-    val DEFAULT_PASSAGE_MODEL: String = PASSAGE_POOL.first().modelId
+    val DEFAULT_TRANSLATION_MODEL: String = TRANSLATION_POOL.first().modelId // gemini-3.5-flash-lite
+    val DEFAULT_PASSAGE_MODEL: String = PASSAGE_POOL.first().modelId // gemini-3.8-flash
     val DEFAULT_MODEL: String = DEFAULT_TRANSLATION_MODEL
 
-    fun getModelsForTask(taskType: GeminiTaskType): List<GeminiModelInfo> = when (taskType) {
-        GeminiTaskType.WORD_TRANSLATION,
-        GeminiTaskType.VISION_EXTRACTION -> TRANSLATION_POOL
-        GeminiTaskType.PASSAGE_ANALYSIS -> PASSAGE_POOL
+    /**
+     * Returns the model hierarchy for a task, silently omitting models past their sunset retirement epoch.
+     */
+    fun getModelsForTask(
+        taskType: GeminiTaskType,
+        currentTime: Long = System.currentTimeMillis()
+    ): List<GeminiModelInfo> {
+        val pool = when (taskType) {
+            GeminiTaskType.PASSAGE_ANALYSIS -> PASSAGE_POOL
+            GeminiTaskType.WORD_TRANSLATION,
+            GeminiTaskType.WISDOM_QUOTE,
+            GeminiTaskType.MCQ_SYNTHESIS,
+            GeminiTaskType.PDF_PARSING,
+            GeminiTaskType.VISION_EXTRACTION -> UTILITY_POOL
+        }
+        return pool.filterNot { it.isRetired(currentTime) }
     }
 }

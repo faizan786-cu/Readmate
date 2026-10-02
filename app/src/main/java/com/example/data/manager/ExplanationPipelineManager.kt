@@ -34,7 +34,8 @@ sealed class ExplanationJobState {
         val pageNumber: Int? = null,
         val statusLabel: String = "Synthesizing...",
         val targetMessageId: Long? = null,
-        val isRegeneration: Boolean = (targetMessageId != null)
+        val isRegeneration: Boolean = (targetMessageId != null),
+        val streamingText: String = ""
     ) : ExplanationJobState()
 
     data class Completed(
@@ -477,13 +478,26 @@ class ExplanationPipelineManager(
         val bId = bookId ?: chapterRepository.getChapter(chapterId)?.bookId ?: 1L
         val cNum = chapterNumber.takeIf { it > 0 } ?: chapterRepository.getChapter(chapterId)?.chapterNumber ?: 1
 
-        val result = geminiRepository.explainPassage(
+        val result = geminiRepository.explainPassageStream(
             passage = trimmedPassage,
             conversationHistory = history,
             bookTitle = bTitle,
             chapterTitle = cTitle,
             authorName = aName,
-            temperature = temperature
+            temperature = temperature,
+            onChunk = { accumulated, _ ->
+                _states.update { current ->
+                    val currentState = current[chapterId]
+                    if (currentState is ExplanationJobState.InProgress) {
+                        current + (chapterId to currentState.copy(
+                            streamingText = accumulated,
+                            statusLabel = "Synthesizing..."
+                        ))
+                    } else {
+                        current
+                    }
+                }
+            }
         )
 
         result.onSuccess { explanation ->
