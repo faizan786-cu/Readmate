@@ -750,6 +750,87 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
     }
 
     @Test
+    fun `flash-lite models strictly omit thinkingConfig and sanitize systemInstruction`() {
+        val visionReq = com.example.data.remote.gemini.GeminiGenerateContentRequest.forVision(
+            prompt = "Extract text",
+            base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+            systemInstruction = "Only English"
+        )
+        // Flash-Lite configuration must never have thinkingConfig
+        assertNull(visionReq.generationConfig?.thinkingConfig)
+
+        // When sanitized for gemini-3.5-flash-lite, thinkingConfig remains null
+        val sanitizedLite = visionReq.sanitizedForModel("gemini-3.5-flash-lite")
+        assertNull(sanitizedLite.generationConfig?.thinkingConfig)
+        assertEquals("Only English", sanitizedLite.systemInstruction?.parts?.firstOrNull()?.text)
+
+        // When given empty/blank systemInstruction, it must be completely omitted (null)
+        val emptyInstructionReq = com.example.data.remote.gemini.GeminiGenerateContentRequest(
+            contents = listOf(com.example.data.remote.gemini.GeminiContent(parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "Hello")))),
+            systemInstruction = com.example.data.remote.gemini.GeminiContent(parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "   "))),
+            generationConfig = com.example.data.remote.gemini.GeminiGenerationConfig.forFlash()
+        )
+        val sanitizedEmpty = emptyInstructionReq.sanitizedForModel("gemini-3.5-flash-lite")
+        assertNull(sanitizedEmpty.systemInstruction)
+        assertNull(sanitizedEmpty.generationConfig?.thinkingConfig)
+
+        // For Flash heavy models, thinkingConfig is preserved
+        val sanitizedFlash = emptyInstructionReq.sanitizedForModel("gemini-3.8-flash")
+        assertNotNull(sanitizedFlash.generationConfig?.thinkingConfig)
+        assertEquals(0, sanitizedFlash.generationConfig?.thinkingConfig?.thinkingBudget)
+    }
+
+    @Test
+    fun `http 400 parameter mismatch automatically cascades to fallback model in ladder`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        val key = storage.addApiKey("AIzaSyTestKey400Recovery", "Key 1")
+        assertNotNull(key)
+
+        val manager = com.example.data.manager.GeminiApiKeyManager(secureStorage = storage)
+        val attemptedModels = mutableListOf<String>()
+
+        val result = manager.executeWithAutoRotation<String>(
+            taskType = com.example.data.model.GeminiTaskType.WORD_TRANSLATION,
+            operationName = "test_400_recovery"
+        ) { _, model ->
+            attemptedModels.add(model)
+            if (model == "gemini-3.5-flash-lite") {
+                // Primary model returns HTTP 400: Request contains an invalid argument
+                val errorBody = okhttp3.ResponseBody.create(
+                    null,
+                    """{"error":{"code":400,"message":"Request contains an invalid argument","status":"INVALID_ARGUMENT"}}"""
+                )
+                retrofit2.Response.error(400, errorBody)
+            } else {
+                // Fallback model in ladder succeeds seamlessly!
+                retrofit2.Response.success("Success on $model")
+            }
+        }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Success on gemini-3.1-flash-lite", result.getOrNull())
+        // Primary failed with 400, automatically stepped down to gemini-3.1-flash-lite
+        assertEquals(listOf("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"), attemptedModels)
+    }
+
+    @Test
+    fun `retryAction in ExplanationJobState Error preserves snippet context and clears state`() = runBlocking {
+        var retried = false
+        val errorState = com.example.data.manager.ExplanationJobState.Error(
+            passage = "Page 1",
+            errorMessage = "Parameter mismatch",
+            pageNumber = 1,
+            retryAction = { retried = true }
+        )
+
+        assertNotNull(errorState.retryAction)
+        errorState.retryAction?.invoke()
+        assertTrue(retried)
+    }
+
+    @Test
     fun `passage word tags are linked to specific messageId and queryable by message`() = runBlocking {
         val bookId = bookRepository.createBook("Atomic Habits", "James Clear", "An Easy & Proven Way to Build Good Habits")
         val chapterId = chapterRepository.createChapter(bookId, 1, "The Fundamentals")

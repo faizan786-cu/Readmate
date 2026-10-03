@@ -183,11 +183,10 @@ Output ONLY a valid JSON array of objects with the exact schema below. Do not wr
             systemInstruction = GeminiContent(
                 parts = listOf(GeminiPart(text = STATIC_SYSTEM_INSTRUCTION))
             ),
-            generationConfig = GeminiGenerationConfig(
-                temperature = 0.2f,
+            generationConfig = GeminiGenerationConfig.forFlashLite(
                 maxOutputTokens = 1024,
-                responseMimeType = "application/json",
-                thinkingConfig = GeminiThinkingConfig(thinkingBudget = 0)
+                temperature = 0.2f,
+                responseMimeType = "application/json"
             )
         )
 
@@ -198,7 +197,7 @@ Output ONLY a valid JSON array of objects with the exact schema below. Do not wr
             apiService.generateContent(
                 model = model,
                 apiKey = apiKey,
-                request = request
+                request = request.sanitizedForModel(model)
             )
         }
 

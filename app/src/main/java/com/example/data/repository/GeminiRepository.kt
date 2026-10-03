@@ -745,7 +745,7 @@ Return ONLY a valid JSON object with the following schema:
             apiService.generateContent(
                 model = model,
                 apiKey = apiKey,
-                request = request
+                request = request.sanitizedForModel(model)
             )
         }
 
@@ -885,7 +885,7 @@ $passage
             systemInstruction = GeminiContent(
                 parts = listOf(GeminiPart(text = STATIC_EXPLANATION_SYSTEM_INSTRUCTION))
             ),
-            generationConfig = GeminiGenerationConfig.lowLatency(
+            generationConfig = GeminiGenerationConfig.forFlash(
                 maxOutputTokens = 2500,
                 temperature = temperature ?: 0.35f
             )
@@ -908,7 +908,7 @@ $passage
             apiService.generateContent(
                 model = model,
                 apiKey = key,
-                request = request
+                request = request.sanitizedForModel(model)
             )
         }
 
@@ -962,7 +962,7 @@ $trimmedPassage
             systemInstruction = GeminiContent(
                 parts = listOf(GeminiPart(text = STATIC_VOCAB_SYSTEM_INSTRUCTION))
             ),
-            generationConfig = GeminiGenerationConfig.lowLatency(
+            generationConfig = GeminiGenerationConfig.forFlashLite(
                 maxOutputTokens = 1500,
                 temperature = 0.2f,
                 responseMimeType = "application/json"
@@ -973,7 +973,7 @@ $trimmedPassage
             apiService.generateContent(
                 model = model,
                 apiKey = key,
-                request = request
+                request = request.sanitizedForModel(model)
             )
         }
 
@@ -1121,7 +1121,7 @@ $trimmedWord
             systemInstruction = GeminiContent(
                 parts = listOf(GeminiPart(text = STATIC_TRANSLATION_SYSTEM_INSTRUCTION))
             ),
-            generationConfig = GeminiGenerationConfig.lowLatency(
+            generationConfig = GeminiGenerationConfig.forFlashLite(
                 maxOutputTokens = 1024,
                 temperature = 0.2f,
                 responseMimeType = "application/json"
@@ -1132,7 +1132,7 @@ $trimmedWord
             apiService.generateContent(
                 model = model,
                 apiKey = key,
-                request = request
+                request = request.sanitizedForModel(model)
             )
         }
 

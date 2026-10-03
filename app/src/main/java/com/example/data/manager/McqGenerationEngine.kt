@@ -263,11 +263,10 @@ Output ONLY a valid JSON array of 5 to 6 objects with the exact schema below. Do
             systemInstruction = GeminiContent(
                 parts = listOf(GeminiPart(text = STATIC_SYSTEM_INSTRUCTION))
             ),
-            generationConfig = GeminiGenerationConfig(
-                temperature = 0.3f,
+            generationConfig = GeminiGenerationConfig.forFlashLite(
                 maxOutputTokens = 2048,
-                responseMimeType = "application/json",
-                thinkingConfig = GeminiThinkingConfig(thinkingBudget = 0)
+                temperature = 0.3f,
+                responseMimeType = "application/json"
             )
         )
 
@@ -278,7 +277,7 @@ Output ONLY a valid JSON array of 5 to 6 objects with the exact schema below. Do
             apiService.generateContent(
                 model = model,
                 apiKey = apiKey,
-                request = request
+                request = request.sanitizedForModel(model)
             )
         }
 

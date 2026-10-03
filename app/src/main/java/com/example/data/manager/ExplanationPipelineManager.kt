@@ -50,7 +50,8 @@ sealed class ExplanationJobState {
         val errorMessage: String,
         val failedAt: Long = System.currentTimeMillis(),
         val pageNumber: Int? = null,
-        val targetMessageId: Long? = null
+        val targetMessageId: Long? = null,
+        val retryAction: (() -> Unit)? = null
     ) : ExplanationJobState()
 }
 
@@ -245,7 +246,23 @@ class ExplanationPipelineManager(
                     _states.update { current ->
                         current + (chapterId to ExplanationJobState.Error(
                             passage = "Page $pageNumber",
-                            errorMessage = error.message ?: "Failed to extract English text from selection."
+                            errorMessage = error.message ?: "Failed to extract English text from selection.",
+                            pageNumber = pageNumber,
+                            retryAction = {
+                                startSnippetExplanation(
+                                    chapterId = chapterId,
+                                    pdfFilePath = pdfFilePath,
+                                    pageIndex = pageIndex,
+                                    cropRect = cropRect,
+                                    viewWidth = viewWidth,
+                                    viewHeight = viewHeight,
+                                    bookTitle = bookTitle,
+                                    chapterTitle = chapterTitle,
+                                    authorName = authorName,
+                                    bookId = bookId,
+                                    chapterNumber = chapterNumber
+                                )
+                            }
                         ))
                     }
                 }
@@ -253,7 +270,23 @@ class ExplanationPipelineManager(
                 _states.update { current ->
                     current + (chapterId to ExplanationJobState.Error(
                         passage = "Page $pageNumber",
-                        errorMessage = t.message ?: "Unexpected error during snippet processing."
+                        errorMessage = t.message ?: "Unexpected error during snippet processing.",
+                        pageNumber = pageNumber,
+                        retryAction = {
+                            startSnippetExplanation(
+                                chapterId = chapterId,
+                                pdfFilePath = pdfFilePath,
+                                pageIndex = pageIndex,
+                                cropRect = cropRect,
+                                viewWidth = viewWidth,
+                                viewHeight = viewHeight,
+                                bookTitle = bookTitle,
+                                chapterTitle = chapterTitle,
+                                authorName = authorName,
+                                bookId = bookId,
+                                chapterNumber = chapterNumber
+                            )
+                        }
                     ))
                 }
             } finally {
@@ -348,7 +381,24 @@ class ExplanationPipelineManager(
                     _states.update { current ->
                         current + (chapterId to ExplanationJobState.Error(
                             passage = "Page $pageNumber",
-                            errorMessage = error.message ?: "Failed to extract text for Part 2."
+                            errorMessage = error.message ?: "Failed to extract text for Part 2.",
+                            pageNumber = pageNumber,
+                            retryAction = {
+                                startMergedSnippetExplanation(
+                                    chapterId = chapterId,
+                                    pdfFilePath = pdfFilePath,
+                                    pageIndex = pageIndex,
+                                    part1Text = part1Text,
+                                    cropRect = cropRect,
+                                    viewWidth = viewWidth,
+                                    viewHeight = viewHeight,
+                                    bookTitle = bookTitle,
+                                    chapterTitle = chapterTitle,
+                                    authorName = authorName,
+                                    bookId = bookId,
+                                    chapterNumber = chapterNumber
+                                )
+                            }
                         ))
                     }
                 }
@@ -356,7 +406,24 @@ class ExplanationPipelineManager(
                 _states.update { current ->
                     current + (chapterId to ExplanationJobState.Error(
                         passage = "Page $pageNumber",
-                        errorMessage = t.message ?: "Unexpected error during multi-page snippet processing."
+                        errorMessage = t.message ?: "Unexpected error during multi-page snippet processing.",
+                        pageNumber = pageNumber,
+                        retryAction = {
+                            startMergedSnippetExplanation(
+                                chapterId = chapterId,
+                                pdfFilePath = pdfFilePath,
+                                pageIndex = pageIndex,
+                                part1Text = part1Text,
+                                cropRect = cropRect,
+                                viewWidth = viewWidth,
+                                viewHeight = viewHeight,
+                                bookTitle = bookTitle,
+                                chapterTitle = chapterTitle,
+                                authorName = authorName,
+                                bookId = bookId,
+                                chapterNumber = chapterNumber
+                            )
+                        }
                     ))
                 }
             } finally {
@@ -560,7 +627,23 @@ class ExplanationPipelineManager(
                 current + (chapterId to ExplanationJobState.Error(
                     passage = trimmedPassage,
                     errorMessage = error.message ?: "Failed to get explanation from Gemini.",
-                    targetMessageId = targetMessageId
+                    targetMessageId = targetMessageId,
+                    retryAction = {
+                        val retryJob = applicationScope.launch(ioDispatcher) {
+                            executeGeminiExplanation(
+                                chapterId = chapterId,
+                                trimmedPassage = trimmedPassage,
+                                bookTitle = bTitle,
+                                chapterTitle = cTitle,
+                                authorName = aName,
+                                bookId = bId,
+                                chapterNumber = cNum,
+                                targetMessageId = targetMessageId,
+                                temperature = temperature
+                            )
+                        }
+                        activeJobs[chapterId] = retryJob
+                    }
                 ))
             }
         }
@@ -576,7 +659,13 @@ class ExplanationPipelineManager(
     ) {
         val currentState = getState(chapterId)
         if (currentState is ExplanationJobState.Error) {
-            if (currentState.targetMessageId != null) {
+            val retry = currentState.retryAction
+            // Clear error state before retrying
+            _states.update { current -> current - chapterId }
+
+            if (retry != null) {
+                retry.invoke()
+            } else if (currentState.targetMessageId != null) {
                 startRegeneration(
                     chapterId = chapterId,
                     messageId = currentState.targetMessageId,

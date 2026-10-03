@@ -191,4 +191,13 @@ object GeminiModelRegistry {
         }
         return pool.filterNot { it.isRetired(currentTime) }
     }
+
+    /**
+     * Returns true if the model belongs to the Lightweight Utility Tier (Flash-Lite Pipeline).
+     * Flash-Lite models must NEVER receive thinkingConfig or thinkingBudget parameters in their payloads.
+     */
+    fun isFlashLite(modelId: String): Boolean {
+        return modelId.contains("flash-lite", ignoreCase = true) ||
+            UTILITY_POOL.any { it.modelId.equals(modelId, ignoreCase = true) }
+    }
 }

@@ -1,5 +1,6 @@
 package com.example.data.remote.gemini
 
+import com.example.data.model.GeminiModelRegistry
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
@@ -18,18 +19,44 @@ data class GeminiGenerationConfig(
 ) {
     companion object {
         /**
-         * Low-latency generation parameters with thinking budget disabled (0)
-         * to prioritize instant streaming responsiveness over deep-reasoning wait times.
+         * Heavy Analysis Tier (Flash Pipeline) configuration with thinking budget disabled (0)
+         * to prioritize instant streaming responsiveness.
          */
-        fun lowLatency(
-            maxOutputTokens: Int = 2048,
-            temperature: Float? = 0.3f,
+        fun forFlash(
+            maxOutputTokens: Int = 2500,
+            temperature: Float? = 0.35f,
             responseMimeType: String? = null
         ): GeminiGenerationConfig = GeminiGenerationConfig(
             temperature = temperature,
             maxOutputTokens = maxOutputTokens,
             responseMimeType = responseMimeType,
             thinkingConfig = GeminiThinkingConfig(thinkingBudget = 0)
+        )
+
+        /**
+         * Lightweight Utility Tier (Flash-Lite Pipeline) configuration.
+         * Flash-Lite models throw HTTP 400 when sent an explicit thinkingConfig or thinkingBudget parameter.
+         * thinkingConfig is strictly null.
+         */
+        fun forFlashLite(
+            maxOutputTokens: Int = 2048,
+            temperature: Float? = 0.2f,
+            responseMimeType: String? = null
+        ): GeminiGenerationConfig = GeminiGenerationConfig(
+            temperature = temperature,
+            maxOutputTokens = maxOutputTokens,
+            responseMimeType = responseMimeType,
+            thinkingConfig = null
+        )
+
+        fun lowLatency(
+            maxOutputTokens: Int = 2048,
+            temperature: Float? = 0.3f,
+            responseMimeType: String? = null
+        ): GeminiGenerationConfig = forFlashLite(
+            maxOutputTokens = maxOutputTokens,
+            temperature = temperature,
+            responseMimeType = responseMimeType
         )
     }
 }
@@ -40,11 +67,93 @@ data class GeminiGenerateContentRequest(
     @Json(name = "systemInstruction") val systemInstruction: GeminiContent? = null,
     @Json(name = "generationConfig") val generationConfig: GeminiGenerationConfig? = null
 ) {
+    /**
+     * Sanitizes request payload according to the target Gemini model:
+     * - Strips thinkingConfig completely for all Flash-Lite models (HTTP 400 prevention).
+     * - Safeguards systemInstruction: omitted entirely if blank/empty instead of empty object.
+     * - Guarantees non-blank text and valid base64 image data parts.
+     * - If stripOptionalConfigs is true (HTTP 400 recovery), strips responseMimeType and extra parameters.
+     */
+    fun sanitizedForModel(modelId: String, stripOptionalConfigs: Boolean = false): GeminiGenerateContentRequest {
+        val isLite = GeminiModelRegistry.isFlashLite(modelId)
+
+        val cleanContents = contents.mapNotNull { content ->
+            val validParts = content.parts.mapNotNull { part ->
+                when {
+                    part.inlineData != null -> {
+                        val cleanBase64 = part.inlineData.data.trim()
+                            .substringAfter("base64,")
+                            .replace("\n", "")
+                            .replace("\r", "")
+                            .replace(" ", "")
+                        if (cleanBase64.isNotEmpty()) {
+                            GeminiPart(
+                                inlineData = GeminiInlineData(
+                                    mimeType = part.inlineData.mimeType.trim().ifEmpty { "image/jpeg" },
+                                    data = cleanBase64
+                                )
+                            )
+                        } else null
+                    }
+                    !part.text.isNullOrBlank() -> GeminiPart(text = part.text.trim())
+                    else -> null
+                }
+            }
+            if (validParts.isNotEmpty()) {
+                GeminiContent(parts = validParts, role = content.role?.takeIf { it.isNotBlank() })
+            } else null
+        }.ifEmpty {
+            listOf(GeminiContent(parts = listOf(GeminiPart(text = "Hello"))))
+        }
+
+        val cleanSystemInstruction = if (stripOptionalConfigs) {
+            null
+        } else {
+            systemInstruction?.let { si ->
+                val validParts = si.parts.mapNotNull { part ->
+                    when {
+                        part.inlineData != null -> part
+                        !part.text.isNullOrBlank() -> GeminiPart(text = part.text.trim())
+                        else -> null
+                    }
+                }
+                if (validParts.isNotEmpty()) {
+                    GeminiContent(parts = validParts, role = si.role?.takeIf { it.isNotBlank() })
+                } else null
+            }
+        }
+
+        val cleanGenerationConfig = if (stripOptionalConfigs) {
+            generationConfig?.let { cfg ->
+                GeminiGenerationConfig(
+                    temperature = cfg.temperature,
+                    maxOutputTokens = cfg.maxOutputTokens,
+                    responseMimeType = null,
+                    thinkingConfig = null
+                )
+            }
+        } else {
+            generationConfig?.let { cfg ->
+                if (isLite) {
+                    cfg.copy(thinkingConfig = null)
+                } else {
+                    cfg
+                }
+            }
+        }
+
+        return GeminiGenerateContentRequest(
+            contents = cleanContents,
+            systemInstruction = cleanSystemInstruction,
+            generationConfig = cleanGenerationConfig
+        )
+    }
+
     companion object {
         fun forText(
             prompt: String,
             systemInstruction: String? = null,
-            generationConfig: GeminiGenerationConfig? = GeminiGenerationConfig.lowLatency()
+            generationConfig: GeminiGenerationConfig? = GeminiGenerationConfig.forFlash()
         ): GeminiGenerateContentRequest {
             val cleanPrompt = prompt.trim()
             require(cleanPrompt.isNotEmpty()) { "Prompt text cannot be empty" }
@@ -99,7 +208,7 @@ data class GeminiGenerateContentRequest(
                 systemInstruction = systemInstruction?.trim()?.takeIf { it.isNotEmpty() }?.let {
                     GeminiContent(parts = listOf(GeminiPart(text = it)))
                 },
-                generationConfig = GeminiGenerationConfig.lowLatency(
+                generationConfig = GeminiGenerationConfig.forFlashLite(
                     maxOutputTokens = 2048,
                     temperature = 0.1f
                 )
@@ -129,7 +238,9 @@ data class GeminiGenerateContentRequest(
                     )
                 )
             }
-            partsList.add(GeminiPart(text = userPrompt.trim()))
+            if (userPrompt.isNotBlank()) {
+                partsList.add(GeminiPart(text = userPrompt.trim()))
+            }
 
             return GeminiGenerateContentRequest(
                 contents = listOf(
@@ -137,10 +248,10 @@ data class GeminiGenerateContentRequest(
                         parts = partsList
                     )
                 ),
-                systemInstruction = GeminiContent(
-                    parts = listOf(GeminiPart(text = systemPrompt.trim()))
-                ),
-                generationConfig = GeminiGenerationConfig.lowLatency(
+                systemInstruction = systemPrompt.trim().takeIf { it.isNotEmpty() }?.let {
+                    GeminiContent(parts = listOf(GeminiPart(text = it)))
+                },
+                generationConfig = GeminiGenerationConfig.forFlashLite(
                     maxOutputTokens = 2500,
                     temperature = 0.1f,
                     responseMimeType = "application/json"
@@ -158,10 +269,10 @@ data class GeminiGenerateContentRequest(
                         parts = listOf(GeminiPart(text = userPrompt.trim()))
                     )
                 ),
-                systemInstruction = GeminiContent(
-                    parts = listOf(GeminiPart(text = systemPrompt.trim()))
-                ),
-                generationConfig = GeminiGenerationConfig.lowLatency(
+                systemInstruction = systemPrompt.trim().takeIf { it.isNotEmpty() }?.let {
+                    GeminiContent(parts = listOf(GeminiPart(text = it)))
+                },
+                generationConfig = GeminiGenerationConfig.forFlashLite(
                     maxOutputTokens = 2500,
                     temperature = 0.1f,
                     responseMimeType = "application/json"

@@ -275,7 +275,7 @@ class GeminiApiKeyManager(
         }
 
         try {
-            val minimalRequest = GeminiGenerateContentRequest.forText("ping")
+            val minimalRequest = GeminiGenerateContentRequest.forText("ping").sanitizedForModel(model)
             val response = apiService.generateContent(
                 model = model,
                 apiKey = trimmedKey,
@@ -407,11 +407,10 @@ class GeminiApiKeyManager(
             }
         }
 
-        val minimalRequest = GeminiGenerateContentRequest.forText("ping")
         val results = mutableListOf<ModelTestResult>()
-
         for (model in GeminiModelRegistry.ALL_MODELS) {
             val startTime = System.currentTimeMillis()
+            val minimalRequest = GeminiGenerateContentRequest.forText("ping").sanitizedForModel(model.modelId)
             try {
                 val response = apiService.generateContent(
                     model = model.modelId,
@@ -748,10 +747,13 @@ class GeminiApiKeyManager(
                                 break // Proceed to next key or step down model
                             }
 
-                            // 5. HTTP 400: Client request error
+                            // 5. HTTP 400: Client request error or parameter mismatch
                             if (code == 400) {
                                 val message = extractGeminiErrorMessage(400, errorBody)
-                                return@withContext Result.failure(Exception("Invalid request ($modelId): $message"))
+                                Log.w(TAG, "HTTP 400 parameter mismatch on model $modelId: $message. Tripping localized cooldown and triggering auto-recovery cascade.")
+                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                lastException = Exception("Parameter mismatch ($modelId): $message")
+                                break // Seamlessly cascade to next key or fallback to next model in hierarchy!
                             }
 
                             // General failure
@@ -852,12 +854,13 @@ class GeminiApiKeyManager(
                 var backoff = RETRY_BACKOFF_BASE_MS
                 var retryCount = 0
 
+                val sanitizedRequest = request.sanitizedForModel(modelId, stripOptionalConfigs = false)
                 while (retryCount <= MAX_SERVER_ERROR_RETRIES) {
                     try {
                         val response: Response<ResponseBody> = apiService.streamGenerateContent(
                             model = modelId,
                             apiKey = keyItem.key.trim(),
-                            request = request
+                            request = sanitizedRequest
                         )
 
                         if (response.isSuccessful) {
@@ -911,6 +914,54 @@ class GeminiApiKeyManager(
                                 else recordKeyPermissionError(keyItem, "Permission error (HTTP 403)")
                                 lastException = Exception("Authentication error on key (HTTP $code).")
                                 break
+                            }
+
+                            // HTTP 400: Parameter mismatch - immediate failover with stripped optional configs
+                            if (code == 400) {
+                                val message = extractGeminiErrorMessage(400, errorBody)
+                                Log.w(TAG, "HTTP 400 on $modelId: $message. Attempting stripped parameter failover retry.")
+                                val strippedRequest = request.sanitizedForModel(modelId, stripOptionalConfigs = true)
+                                val fallbackResponse: Response<ResponseBody>? = try {
+                                    apiService.streamGenerateContent(
+                                        model = modelId,
+                                        apiKey = keyItem.key.trim(),
+                                        request = strippedRequest
+                                    )
+                                } catch (_: Exception) { null }
+
+                                if (fallbackResponse != null && fallbackResponse.isSuccessful) {
+                                    val fbBody = fallbackResponse.body()
+                                    if (fbBody != null) {
+                                        val accumulatedBuilder = StringBuilder()
+                                        val reader = fbBody.byteStream().bufferedReader()
+                                        var line: String? = reader.readLine()
+                                        while (line != null) {
+                                            val trimmed = line.trim()
+                                            if (trimmed.startsWith("data:")) {
+                                                val dataJson = trimmed.removePrefix("data:").trim()
+                                                if (dataJson.isNotEmpty() && dataJson != "[DONE]") {
+                                                    val chunkText = extractTextChunkFromEventJson(dataJson)
+                                                    if (chunkText.isNotEmpty()) {
+                                                        accumulatedBuilder.append(chunkText)
+                                                        onChunk(accumulatedBuilder.toString(), chunkText)
+                                                    }
+                                                }
+                                            }
+                                            line = reader.readLine()
+                                        }
+                                        val fullText = accumulatedBuilder.toString().trim()
+                                        if (fullText.isNotEmpty()) {
+                                            modelCooldowns.remove(cooldownKey)
+                                            recordSuccess(keyItem)
+                                            return@withContext Result.success(fullText)
+                                        }
+                                    }
+                                }
+
+                                // Mark cooldown for this specific (key, model) pair and cascade to next key / fallback model
+                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                lastException = Exception("Parameter mismatch on $modelId: $message")
+                                break // Rotate to NEXT key or step down model in ladder
                             }
 
                             if (code in listOf(500, 503, 504, 408)) {
