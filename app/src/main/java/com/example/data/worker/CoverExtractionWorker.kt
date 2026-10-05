@@ -82,6 +82,7 @@ class CoverExtractionWorker(
             filePath: String,
             bookTitle: String
         ): Boolean = withContext(Dispatchers.IO) {
+            val coverStart = System.currentTimeMillis()
             try {
                 val book = app.bookRepository.getBook(bookId) ?: return@withContext false
 
@@ -100,7 +101,30 @@ class CoverExtractionWorker(
                     return@withContext false
                 }
 
-                val pagesToScan = 5
+                val pageCount = com.example.data.pdf.PdfStorageManager.getPdfPageCount(pdfFile).coerceAtLeast(1)
+                if (pageCount == 1) {
+                    Log.d(TAG, "Single-page document detected. Using page 0 directly as cover.")
+                    val highResBitmap = PdfPageRendererHelper.renderPageBitmap(
+                        filePath = filePath,
+                        pageIndex = 0,
+                        targetWidthPx = 800,
+                        targetHeightPx = 1120
+                    )
+                    if (highResBitmap != null) {
+                        val coversDir = File(app.filesDir, "covers").apply { if (!exists()) mkdirs() }
+                        val coverFile = File(coversDir, "cover_${bookId}.png")
+                        FileOutputStream(coverFile).use { outStream ->
+                            highResBitmap.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+                            outStream.flush()
+                        }
+                        app.bookRepository.updateCoverImageUrl(bookId, coverFile.absolutePath)
+                        val duration = System.currentTimeMillis() - coverStart
+                        Log.d(TAG, "[Timing] Cover extraction duration: ${duration}ms")
+                        return@withContext true
+                    }
+                }
+
+                val pagesToScan = 3.coerceAtMost(pageCount)
                 val thumbnailParts = mutableListOf<GeminiPart>()
                 val validPageIndices = mutableListOf<Int>()
 
@@ -165,7 +189,8 @@ class CoverExtractionWorker(
                             parts = thumbnailParts
                         )
                     ),
-                    generationConfig = GeminiGenerationConfig(
+                    generationConfig = GeminiGenerationConfig.forFlashLite(
+                        maxOutputTokens = 300,
                         temperature = 0.1f,
                         responseMimeType = "application/json"
                     )
@@ -228,8 +253,12 @@ class CoverExtractionWorker(
 
                 // Update Room database
                 app.bookRepository.updateCoverImageUrl(bookId, coverPath)
+                val duration = System.currentTimeMillis() - coverStart
+                Log.d(TAG, "[Timing] Cover extraction duration: ${duration}ms")
                 true
             } catch (e: Exception) {
+                val duration = System.currentTimeMillis() - coverStart
+                Log.d(TAG, "[Timing] Cover extraction duration (failed): ${duration}ms")
                 Log.e(TAG, "Error in executeDirectly for book $bookId: ${e.message}", e)
                 false
             }

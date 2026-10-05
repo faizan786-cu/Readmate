@@ -131,15 +131,31 @@ object PdfStorageManager {
             pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
             renderer = PdfRenderer(pfd)
             renderer.pageCount
-        } catch (e: Exception) {
-            0
+        } catch (t: Throwable) {
+            extractPageCountFromPdfBytes(file)
         } finally {
             try {
                 renderer?.close()
-            } catch (_: Exception) { }
+            } catch (_: Throwable) { }
             try {
                 pfd?.close()
-            } catch (_: Exception) { }
+            } catch (_: Throwable) { }
+        }
+    }
+
+    private fun extractPageCountFromPdfBytes(file: File): Int {
+        return try {
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                val len = raf.length().coerceAtMost(256 * 1024L).toInt()
+                val bytes = ByteArray(len)
+                raf.seek(0)
+                raf.readFully(bytes)
+                val text = String(bytes, Charsets.ISO_8859_1)
+                val countMatch = Regex("""/Count\s+(\d+)""").find(text)
+                countMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            }
+        } catch (_: Throwable) {
+            0
         }
     }
 

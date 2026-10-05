@@ -770,8 +770,20 @@ Return ONLY a valid JSON object with the following schema:
         }
     }
 
-    // Lightweight in-memory OCR snippet cache to avoid expensive re-rendering and re-OCR of identical selections
-    private val ocrSnippetCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    // Lightweight in-memory bounded OCR snippet cache to avoid expensive re-rendering and re-OCR of identical selections
+    private val ocrSnippetCache: MutableMap<String, String> = java.util.Collections.synchronizedMap(
+        object : java.util.LinkedHashMap<String, String>(100, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
+                return size > 100
+            }
+        }
+    )
+
+    fun getOcrSnippetCacheSize(): Int = ocrSnippetCache.size
+
+    fun clearOcrSnippetCache() {
+        ocrSnippetCache.clear()
+    }
 
     /**
      * High-resolution crops a PDF page region and transcribes its text verbatim using Gemini Flash-Lite Vision.
@@ -781,9 +793,10 @@ Return ONLY a valid JSON object with the following schema:
         pageIndex: Int,
         cropRectNormalized: RectF,
         viewWidth: Float = 0f,
-        viewHeight: Float = 0f
+        viewHeight: Float = 0f,
+        purpose: String = "OCR_SNIPPET"
     ): Result<String> = withContext(ioDispatcher) {
-        val cropCacheKey = "$pdfFilePath:$pageIndex:${(cropRectNormalized.left * 1000).toInt()}:${(cropRectNormalized.top * 1000).toInt()}:${(cropRectNormalized.right * 1000).toInt()}:${(cropRectNormalized.bottom * 1000).toInt()}"
+        val cropCacheKey = "$pdfFilePath:$pageIndex:${(cropRectNormalized.left * 1000).toInt()}:${(cropRectNormalized.top * 1000).toInt()}:${(cropRectNormalized.right * 1000).toInt()}:${(cropRectNormalized.bottom * 1000).toInt()}:$purpose"
         val cachedText = ocrSnippetCache[cropCacheKey]
         if (!cachedText.isNullOrBlank()) {
             Log.d(TAG, "Reusing cached OCR snippet transcription for $cropCacheKey")
@@ -802,7 +815,6 @@ Return ONLY a valid JSON object with the following schema:
             onSuccess = { base64Data ->
                 val result = extractTextFromImage(base64Data, mimeType = "image/jpeg")
                 result.onSuccess { extracted ->
-                    if (ocrSnippetCache.size > 100) ocrSnippetCache.clear()
                     ocrSnippetCache[cropCacheKey] = extracted
                 }
                 result

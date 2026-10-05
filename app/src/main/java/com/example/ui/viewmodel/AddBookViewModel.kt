@@ -63,10 +63,13 @@ class AddBookViewModel(
         errorMessage = null
 
         viewModelScope.launch {
+            val selectStartTime = System.currentTimeMillis()
             val tempId = System.currentTimeMillis()
             val importResult = withContext(Dispatchers.IO) {
                 PdfStorageManager.importPdfForBook(context, uri, tempId)
             }
+            val copyDuration = System.currentTimeMillis() - selectStartTime
+            Log.d("AddBookViewModel", "[Timing] PDF selected -> local copy complete: ${copyDuration}ms")
 
             isImportingPdf = false
             importResult.fold(
@@ -126,6 +129,8 @@ class AddBookViewModel(
             .trim()
             .ifBlank { "Untitled Book" }
 
+        val bookCreationStartTime = System.currentTimeMillis()
+
         viewModelScope.launch {
             try {
                 // 0. Pre-Parse Guard: Check if fallback title matches an existing book in Room
@@ -170,6 +175,8 @@ class AddBookViewModel(
                 val rawSections = payload.sections.ifEmpty {
                     extractor.createFallbackSections(totalPages, finalTitle)
                 }
+
+                val dbInsertStart = System.currentTimeMillis()
 
                 // 4. Save the book entry into Room books table
                 val newBookId = withContext(Dispatchers.IO) {
@@ -228,7 +235,12 @@ class AddBookViewModel(
                     chapterRepository.purgeJunkChapters()
                 }
 
+                val dbInsertTime = System.currentTimeMillis() - dbInsertStart
+                Log.d("AddBookViewModel", "[Timing] DB insertion duration: ${dbInsertTime}ms")
+
                 isCreatingBook = false
+                val bookVisibleTime = System.currentTimeMillis() - bookCreationStartTime
+                Log.d("AddBookViewModel", "[Timing] Book usable/visible duration: ${bookVisibleTime}ms")
 
                 // Trigger background community catalog and relay synchronization without blocking user
                 try {

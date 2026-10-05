@@ -271,7 +271,7 @@ data class GeminiGenerateContentRequest(
                     GeminiContent(parts = listOf(GeminiPart(text = it)))
                 },
                 generationConfig = GeminiGenerationConfig.forFlashLite(
-                    maxOutputTokens = 2500,
+                    maxOutputTokens = 1000,
                     temperature = 0.1f,
                     responseMimeType = "application/json"
                 )
@@ -292,7 +292,7 @@ data class GeminiGenerateContentRequest(
                     GeminiContent(parts = listOf(GeminiPart(text = it)))
                 },
                 generationConfig = GeminiGenerationConfig.forFlashLite(
-                    maxOutputTokens = 2500,
+                    maxOutputTokens = 1000,
                     temperature = 0.1f,
                     responseMimeType = "application/json"
                 )

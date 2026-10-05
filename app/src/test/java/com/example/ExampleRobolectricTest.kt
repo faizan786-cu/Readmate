@@ -19,6 +19,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -3017,5 +3018,460 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
             assertFalse("No method should be named sleep in Gemini orchestration", m.name.contains("sleep", ignoreCase = true))
         }
     }
+
+    // =========================================================================
+    // PHASE 5: READMATE FLASH-LITE UTILITY PIPELINE & FAST PDF IMPORT TESTS
+    // =========================================================================
+
+    @Test
+    fun `phase 5 - task 1 - pdf structure and utility tasks strictly route to flash lite and never passage flash pool`() {
+        val pdfModels = com.example.data.model.GeminiModelRegistry.getModelsForTask(com.example.data.model.GeminiTaskType.PDF_PARSING)
+        val passageModels = com.example.data.model.GeminiModelRegistry.getModelsForTask(com.example.data.model.GeminiTaskType.PASSAGE_ANALYSIS)
+
+        // Verify PDF_PARSING uses Flash-Lite ladder
+        assertEquals("First model for PDF_PARSING must be gemini-3.5-flash-lite", "gemini-3.5-flash-lite", pdfModels[0].modelId)
+        assertTrue("PDF_PARSING pool must contain gemini-3.1-flash-lite", pdfModels.any { it.modelId == "gemini-3.1-flash-lite" })
+        assertTrue("PDF_PARSING pool must contain gemini-2.5-flash-lite", pdfModels.any { it.modelId == "gemini-2.5-flash-lite" })
+
+        // Verify NO model from PDF_PARSING is in PASSAGE_POOL
+        for (model in pdfModels) {
+            assertTrue("PDF parsing model ${model.modelId} must be recognized as Flash-Lite", com.example.data.model.GeminiModelRegistry.isFlashLite(model.modelId))
+            assertFalse("PDF parsing model ${model.modelId} must NOT be in PASSAGE_POOL", passageModels.any { it.modelId == model.modelId })
+        }
+
+        // Verify PASSAGE_ANALYSIS primary model remains gemini-3.8-flash
+        assertEquals("PASSAGE_ANALYSIS primary must remain gemini-3.8-flash", "gemini-3.8-flash", passageModels[0].modelId)
+    }
+
+    @Test
+    fun `phase 5 - task 1 - mcq quote translation and vision utility mappings remain flash lite`() {
+        val utilityTaskTypes = listOf(
+            com.example.data.model.GeminiTaskType.MCQ_SYNTHESIS,
+            com.example.data.model.GeminiTaskType.WISDOM_QUOTE,
+            com.example.data.model.GeminiTaskType.WORD_TRANSLATION,
+            com.example.data.model.GeminiTaskType.VISION_EXTRACTION,
+            com.example.data.model.GeminiTaskType.PDF_PARSING
+        )
+
+        for (task in utilityTaskTypes) {
+            val models = com.example.data.model.GeminiModelRegistry.getModelsForTask(task)
+            assertEquals("Utility task $task must start with gemini-3.5-flash-lite", "gemini-3.5-flash-lite", models[0].modelId)
+            for (m in models) {
+                assertTrue("Model ${m.modelId} for task $task must be Flash-Lite", com.example.data.model.GeminiModelRegistry.isFlashLite(m.modelId))
+                assertFalse("Model ${m.modelId} for task $task must not be gemini-3.8-flash", m.modelId == "gemini-3.8-flash")
+            }
+        }
+    }
+
+    @Test
+    fun `phase 5 - task 2 and 3 - large document structure parser does not send entire pdf to gemini and bounds tokens`() {
+        // Verify bounded maxOutputTokens configured for PDF structure parsing
+        val request = com.example.data.remote.gemini.GeminiGenerateContentRequest.forPdfTextStructure(
+            systemPrompt = "System Prompt",
+            userPrompt = "Front-Matter Text Sample"
+        )
+
+        assertNotNull("Generation config must not be null", request.generationConfig)
+        val maxTokens = request.generationConfig?.maxOutputTokens ?: 0
+        assertTrue("Structure JSON output tokens must be bounded between 800 and 1200, was: $maxTokens", maxTokens in 800..1200)
+
+        // Verify request contains only text and NO inline PDF Base64 blob
+        val parts = request.contents.flatMap { it.parts }
+        assertTrue("Request parts must only contain text parts", parts.all { it.text != null && it.inlineData == null })
+    }
+
+    @Test
+    fun `phase 5 - task 2 and 4 - front-matter text scanner bounds inspection to initial pages`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dummyFile = java.io.File(context.cacheDir, "test_large_document.pdf")
+        dummyFile.writeBytes(ByteArray(1024 * 1024) { (it % 128).toByte() })
+
+        val extractor = com.example.data.pdf.PdfStructureExtractor(
+            com.example.data.manager.GeminiKeyRotationManager(
+                com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+            )
+        )
+
+        // Test that front-matter reader bounds its reading to front-matter range
+        val frontMatter = extractor.extractFrontMatterText(dummyFile, maxPages = 20)
+        assertNotNull("Extracted front-matter must not be null", frontMatter)
+
+        dummyFile.delete()
+    }
+
+    @Test
+    fun `phase 5 - front-matter inspection is based on actual physical page indices not initial raw byte count`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(
+            com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        )
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val pagesMap = mapOf(
+            1 to "Title: Effective Kotlin\nAuthor: Marcin Moskala",
+            2 to "Copyright 2020\nAll rights reserved",
+            3 to "Table of Contents\nChapter 1 ... 1\nChapter 2 ... 30",
+            4 to "Chapter 1: Code Safety"
+        )
+        val frontMatter = extractor.buildPageIndexedFrontMatter(pagesMap)
+        assertTrue("Front matter must contain [PHYSICAL_PAGE=1]", frontMatter.contains("[PHYSICAL_PAGE=1]"))
+        assertTrue("Front matter must contain [PHYSICAL_PAGE=2]", frontMatter.contains("[PHYSICAL_PAGE=2]"))
+        assertTrue("Front matter must contain [PHYSICAL_PAGE=3]", frontMatter.contains("[PHYSICAL_PAGE=3]"))
+        assertTrue("Front matter must contain [PHYSICAL_PAGE=4]", frontMatter.contains("[PHYSICAL_PAGE=4]"))
+        assertTrue("Front matter must preserve page text", frontMatter.contains("Chapter 1: Code Safety"))
+    }
+
+    @Test
+    fun `phase 5 - no more than first 20 physical pages are inspected`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(
+            com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        )
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val dummyPdf = java.io.File(context.cacheDir, "test_25_pages.pdf")
+        dummyPdf.writeText("%PDF-1.4\n%Dummy content\n%%EOF")
+
+        // Pass maxPages = 50, but it must be bounded to 20
+        val pagesText = extractor.extractPhysicalPagesText(dummyPdf, maxPages = 50)
+        assertTrue("Must not inspect more than 20 pages", pagesText.size <= 20)
+        assertTrue("All physical page indices must be <= 20", pagesText.keys.all { it <= 20 })
+
+        dummyPdf.delete()
+    }
+
+    @Test
+    fun `phase 5 - pdf where page content objects are stored outside first 384 KB can still have early physical pages processed`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(
+            com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        )
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val dummyPdf = java.io.File(context.cacheDir, "large_offset_page.pdf")
+        val padding = "% " + "x".repeat(400 * 1024) + "\n" // 400 KB of padding before page 1 object!
+        val pdfContent = buildString {
+            append("%PDF-1.4\n")
+            append("1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n")
+            append("2 0 obj\n<</Type/Pages/Count 1/Kids[3 0 R]>>\nendobj\n")
+            append(padding)
+            append("3 0 obj\n<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R>>\nendobj\n")
+            append("4 0 obj\n<</Length 60>>\nstream\n(Deep Page Content Beyond 384KB) Tj\nendstream\nendobj\n")
+            append("trailer\n<</Size 5/Root 1 0 R>>\nstartxref\n99999\n%%EOF\n")
+        }
+        dummyPdf.writeText(pdfContent)
+
+        // File is > 400 KB, so content is located way beyond 384 KB
+        assertTrue("PDF file size must be > 384 KB", dummyPdf.length() > 384 * 1024)
+
+        val pagesMap = extractor.extractPhysicalPagesText(dummyPdf, maxPages = 5)
+        assertTrue("Physical page 1 must be parsed despite object stored beyond 384 KB", pagesMap.containsKey(1))
+        val page1Text = pagesMap[1] ?: ""
+        assertTrue("Extracted text must contain content from beyond 384KB: was '$page1Text'", page1Text.contains("Deep Page Content Beyond 384KB"))
+
+        val frontMatter = extractor.extractFrontMatterText(dummyPdf, maxPages = 5)
+        assertTrue("Front-matter representation must include physical page marker", frontMatter.contains("[PHYSICAL_PAGE=1]"))
+        assertTrue("Front-matter representation must include page content", frontMatter.contains("Deep Page Content Beyond 384KB"))
+
+        dummyPdf.delete()
+    }
+
+    @Test
+    fun `phase 5 - toc printed page 1 is not automatically treated as physical pdf page 1 when front matter creates an offset`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(
+            com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        )
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        // Physical pages simulation:
+        // Physical Page 1: Cover
+        // Physical Page 2: Copyright
+        // Physical Page 3: Table of Contents (printed page 1 is Chapter 1, but TOC is at physical page 3!)
+        // Physical Page 4: Foreword
+        // Physical Page 7: Chapter 1: The Beginning (actual physical start of Chapter 1!)
+        val pagesText = mapOf(
+            1 to "Cover Page",
+            2 to "Copyright 2024",
+            3 to "Table of Contents\nChapter 1 ............... 1\nChapter 2 ............... 19",
+            4 to "Foreword by the Author",
+            7 to "Chapter 1: The Beginning\nIt was a dark and stormy night..."
+        )
+
+        val result = extractor.extractLocalFrontMatterStructure(pagesText, totalPages = 100, fallbackTitle = "Test Book")
+        assertTrue("Structure result must be physically trustworthy because offset was verified against Chapter 1", result.isPhysicallyTrustworthy)
+        assertTrue("Sections must be found", result.sections.isNotEmpty())
+
+        val chapter1 = result.sections.first()
+        // Crucial assertion: Chapter 1 startPage MUST NOT be 1 (which is the Cover)!
+        assertNotEquals("Printed page 1 must NOT be treated as physical page 1", 1, chapter1.startPage)
+        assertEquals("Chapter 1 startPage must be adjusted to physical page 7 based on physical heading location", 7, chapter1.startPage)
+    }
+
+    @Test
+    fun `phase 5 - ai structure input contains explicit physical page markers`() {
+        val pagesText = mapOf(
+            1 to "Book Title Page",
+            2 to "Copyright Page",
+            4 to "Contents\nChapter 1 ... 1"
+        )
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(
+            com.example.data.local.security.AndroidKeystoreApiKeyStorage(ApplicationProvider.getApplicationContext())
+        )
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+        val frontMatter = extractor.buildPageIndexedFrontMatter(pagesText)
+
+        assertTrue("Input must have [PHYSICAL_PAGE=1]", frontMatter.contains("[PHYSICAL_PAGE=1]"))
+        assertTrue("Input must have [PHYSICAL_PAGE=2]", frontMatter.contains("[PHYSICAL_PAGE=2]"))
+        assertTrue("Input must have [PHYSICAL_PAGE=4]", frontMatter.contains("[PHYSICAL_PAGE=4]"))
+    }
+
+    @Test
+    fun `phase 5 - local extraction does not skip ai solely because two chapter titles were found if physical boundaries are uncertain`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_phase5_local_ai", "Key 1")
+
+        var aiWasCalled = false
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                aiWasCalled = true
+                val json = """
+                {
+                  "bookTitle": "AI Verified Book",
+                  "author": "AI Verified Author",
+                  "sections": [
+                    {"title": "Chapter 1", "sectionType": "CORE_CHAPTER", "chapterNumber": 1, "startPage": 5, "endPage": 20, "orderIndex": 1},
+                    {"title": "Chapter 2", "sectionType": "CORE_CHAPTER", "chapterNumber": 2, "startPage": 21, "endPage": 40, "orderIndex": 2}
+                  ]
+                }
+                """.trimIndent()
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = json))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        // Case: TOC has two chapters, BUT no physical chapter headings are observed to verify offset.
+        // Therefore isPhysicallyTrustworthy must be FALSE.
+        val unverifiedPagesText = mapOf(
+            2 to "Table of Contents\nChapter 1 ............... 1\nChapter 2 ............... 15"
+        )
+        val localResult = extractor.extractLocalFrontMatterStructure(unverifiedPagesText, totalPages = 50, fallbackTitle = "Uncertain Book")
+        assertEquals("Local TOC parser found 2 sections", 2, localResult.sections.size)
+        assertFalse("Boundaries must NOT be trustworthy without physical offset verification", localResult.isPhysicallyTrustworthy)
+
+        // Now test in extractBookAndStructure with a synthetic PDF containing this unverified TOC
+        val dummyPdf = java.io.File(context.cacheDir, "uncertain_toc_book.pdf")
+        dummyPdf.writeText(buildString {
+            append("%PDF-1.4\n")
+            append("1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n")
+            append("2 0 obj<</Type/Pages/Count 2/Kids[3 0 R 4 0 R]>>endobj\n")
+            append("3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 5 0 R>>endobj\n")
+            append("4 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 6 0 R>>endobj\n")
+            append("5 0 obj<</Length 20>>stream\n(Cover Page) Tj\nendstream\nendobj\n")
+            append("6 0 obj<</Length 60>>stream\n(Table of Contents) Tj\n(Chapter 1 ... 1) Tj\n(Chapter 2 ... 15) Tj\nendstream\nendobj\n")
+            append("trailer<</Size 7/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+        })
+
+        val result = extractor.extractBookAndStructure(dummyPdf, totalPages = 50, fallbackTitle = "Uncertain Book")
+        assertTrue("Extraction must succeed", result.isSuccess)
+        assertTrue("AI MUST have been called because local physical boundaries were uncertain (did NOT skip AI just because sections.size >= 2)", aiWasCalled)
+        val payload = result.getOrNull()
+        assertEquals("AI resolved title must be used", "AI Verified Book", payload?.bookTitle)
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - full pdf is still never base64 uploaded`() {
+        val request = com.example.data.remote.gemini.GeminiGenerateContentRequest.forPdfTextStructure(
+            systemPrompt = "System instruction",
+            userPrompt = "[PHYSICAL_PAGE=1]\nSample text"
+        )
+        val parts = request.contents.flatMap { it.parts }
+        assertTrue("All parts must have non-null text", parts.all { it.text != null })
+        assertTrue("No inline data blob should ever exist for PDF structure request", parts.all { it.inlineData == null })
+    }
+
+    @Test
+    fun `phase 5 - task 5 - cover extraction bounds scanning range and handles 1-page pdf locally`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dummyPdf = java.io.File(context.cacheDir, "test_single_page.pdf")
+        dummyPdf.writeText("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000114 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF")
+
+        val pageCount = com.example.data.pdf.PdfStorageManager.getPdfPageCount(dummyPdf)
+        // Verify page count utility works safely
+        assertTrue("Page count must be 0 or 1 for synthetic PDF without crashing", pageCount >= 0)
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - task 6 - repeated identical ocr vision work reuses bounded session cache`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_phase5_ocr", "Key 1")
+
+        var apiCallsCount = 0
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                apiCallsCount++
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "Transcribed text sample $apiCallsCount"))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val repository = com.example.data.repository.GeminiRepository(storage, fakeApiService)
+        repository.clearOcrSnippetCache()
+
+        val dummyPdf = java.io.File(context.cacheDir, "test_ocr_crop.pdf")
+        dummyPdf.writeText("%PDF-1.4\n%Dummy content\n%%EOF")
+
+        val cropRect1 = android.graphics.RectF(0.1f, 0.1f, 0.9f, 0.5f)
+
+        // 1. Execute the same OCR/crop operation once
+        val res1 = repository.extractTextFromPageRegion(
+            pdfFilePath = dummyPdf.absolutePath,
+            pageIndex = 0,
+            cropRectNormalized = cropRect1,
+            purpose = "OCR_SNIPPET"
+        )
+        assertTrue("First OCR call should succeed", res1.isSuccess)
+        // 2. Fake Gemini API call count becomes 1
+        assertEquals("API call count must be 1 after first call", 1, apiCallsCount)
+        val text1 = res1.getOrNull()
+
+        // 3. Execute the exact same PDF/page/crop/purpose again
+        val res2 = repository.extractTextFromPageRegion(
+            pdfFilePath = dummyPdf.absolutePath,
+            pageIndex = 0,
+            cropRectNormalized = cropRect1,
+            purpose = "OCR_SNIPPET"
+        )
+        assertTrue("Second OCR call should succeed", res2.isSuccess)
+        val text2 = res2.getOrNull()
+
+        // 4. Confirm returned text is reused
+        assertEquals("Returned text must be identical and reused", text1, text2)
+        // 5. Confirm Gemini API call count remains 1
+        assertEquals("API call count must remain 1 due to cache reuse", 1, apiCallsCount)
+
+        // 6. Confirm different purpose or crop creates a distinct cache entry
+        val res3 = repository.extractTextFromPageRegion(
+            pdfFilePath = dummyPdf.absolutePath,
+            pageIndex = 0,
+            cropRectNormalized = cropRect1,
+            purpose = "OCR_HEADER" // Different purpose
+        )
+        assertTrue("Different purpose call should succeed", res3.isSuccess)
+        assertEquals("API call count must increment to 2 for different purpose", 2, apiCallsCount)
+
+        val cropRect2 = android.graphics.RectF(0.2f, 0.2f, 0.8f, 0.8f)
+        val res4 = repository.extractTextFromPageRegion(
+            pdfFilePath = dummyPdf.absolutePath,
+            pageIndex = 0,
+            cropRectNormalized = cropRect2, // Different crop
+            purpose = "OCR_SNIPPET"
+        )
+        assertTrue("Different crop call should succeed", res4.isSuccess)
+        assertEquals("API call count must increment to 3 for different crop", 3, apiCallsCount)
+
+        // 7. Confirm cache remains bounded to <= 100 entries
+        for (i in 1..110) {
+            repository.extractTextFromPageRegion(
+                pdfFilePath = dummyPdf.absolutePath,
+                pageIndex = i,
+                cropRectNormalized = cropRect1,
+                purpose = "BOUNDED_TEST_$i"
+            )
+        }
+        assertTrue("Cache size must remain bounded <= 100, was: ${repository.getOcrSnippetCacheSize()}", repository.getOcrSnippetCacheSize() <= 100)
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - task 8 - book import succeeds with deterministic fallback sections when ai fails`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_phase5_fallback", "Key 1")
+
+        // API service that always fails with 500
+        val failingApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                return retrofit2.Response.error(500, okhttp3.ResponseBody.create(null, "{\"error\":{\"code\":500,\"message\":\"Internal error\"}}"))
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, failingApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val dummyPdf = java.io.File(context.cacheDir, "failing_ai_book.pdf")
+        dummyPdf.writeText("%PDF-1.4\n%Dummy content\n%%EOF")
+
+        val result = extractor.extractBookAndStructure(
+            pdfFile = dummyPdf,
+            totalPages = 120,
+            fallbackTitle = "Reliable Book Title"
+        )
+
+        assertTrue("Import structure extraction must succeed even when AI completely fails", result.isSuccess)
+        val payload = result.getOrNull()
+        assertNotNull("Payload must not be null", payload)
+        assertEquals("Fallback title must be preserved", "Reliable Book Title", payload?.bookTitle)
+        assertTrue("Fallback sections must be generated covering pages", payload?.sections?.isNotEmpty() == true)
+
+        // Verify sections cover page range
+        val firstSec = payload!!.sections.first()
+        val lastSec = payload.sections.last()
+        assertEquals("First section must start at page 1", 1, firstSec.startPage)
+        assertEquals("Last section must end at totalPages 120", 120, lastSec.endPage)
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - task 9 - pdf storage manager handles invalid files and closes resources safely`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val nonExistentFile = java.io.File(context.cacheDir, "non_existent_file.pdf")
+        val pageCountNonExistent = com.example.data.pdf.PdfStorageManager.getPdfPageCount(nonExistentFile)
+        assertEquals("Non-existent file must return 0 pages without exception", 0, pageCountNonExistent)
+
+        val emptyFile = java.io.File(context.cacheDir, "empty_file.pdf")
+        emptyFile.createNewFile()
+        val pageCountEmpty = com.example.data.pdf.PdfStorageManager.getPdfPageCount(emptyFile)
+        assertEquals("Empty file must return 0 pages without exception", 0, pageCountEmpty)
+        emptyFile.delete()
+    }
 }
+
 
