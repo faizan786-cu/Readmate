@@ -111,6 +111,7 @@ class ExplanationPipelineManager(
         bookId: Long? = null,
         chapterNumber: Int = 1
     ) {
+        val tapTime = System.currentTimeMillis()
         val trimmedPassage = passage.trim()
         if (trimmedPassage.isEmpty()) return
 
@@ -147,7 +148,8 @@ class ExplanationPipelineManager(
                     chapterTitle = chapterTitle,
                     authorName = authorName,
                     bookId = bookId,
-                    chapterNumber = chapterNumber
+                    chapterNumber = chapterNumber,
+                    tapTime = tapTime
                 )
             } catch (t: Throwable) {
                 _states.update { current ->
@@ -181,6 +183,7 @@ class ExplanationPipelineManager(
         bookId: Long? = null,
         chapterNumber: Int = 1
     ) {
+        val tapTime = System.currentTimeMillis()
         if (isGenerating(chapterId)) {
             Log.d(TAG, "Chapter $chapterId already has an explanation in progress. Ignoring duplicate start.")
             return
@@ -240,7 +243,8 @@ class ExplanationPipelineManager(
                         chapterTitle = chapterTitle,
                         authorName = authorName,
                         bookId = bookId,
-                        chapterNumber = chapterNumber
+                        chapterNumber = chapterNumber,
+                        tapTime = tapTime
                     )
                 }.onFailure { error ->
                     _states.update { current ->
@@ -315,6 +319,7 @@ class ExplanationPipelineManager(
         bookId: Long? = null,
         chapterNumber: Int = 1
     ) {
+        val tapTime = System.currentTimeMillis()
         if (isGenerating(chapterId)) {
             Log.d(TAG, "Chapter $chapterId already has an explanation in progress. Ignoring duplicate start.")
             return
@@ -375,7 +380,8 @@ class ExplanationPipelineManager(
                         chapterTitle = chapterTitle,
                         authorName = authorName,
                         bookId = bookId,
-                        chapterNumber = chapterNumber
+                        chapterNumber = chapterNumber,
+                        tapTime = tapTime
                     )
                 }.onFailure { error ->
                     _states.update { current ->
@@ -535,8 +541,12 @@ class ExplanationPipelineManager(
         bookId: Long? = null,
         chapterNumber: Int = 1,
         targetMessageId: Long? = null,
-        temperature: Float? = null
+        temperature: Float? = null,
+        tapTime: Long = System.currentTimeMillis()
     ) {
+        val tapToRequestStart = System.currentTimeMillis() - tapTime
+        Log.d(TAG, "[Timing] Tap-to-request-start: ${tapToRequestStart}ms")
+
         val history = chapterMessageRepository.getMessagesForChapter(chapterId)
             .filter { it.id != targetMessageId }
         val bTitle = bookTitle ?: bookId?.let { bookRepository.getBook(it)?.title }
@@ -588,38 +598,42 @@ class ExplanationPipelineManager(
             }
             _completionEvents.tryEmit(chapterId to finalMessageId)
 
-            // Silently trigger background quote extraction engine
+            // Asynchronously trigger background quote extraction without blocking passage completion
             quoteExtractionEngine?.let { engine ->
-                try {
-                    engine.extractAndSaveQuotesSilently(
-                        passage = trimmedPassage,
-                        bookId = bId,
-                        bookTitle = bTitle.orEmpty(),
-                        author = aName,
-                        chapterId = chapterId,
-                        chapterNumber = cNum,
-                        chapterTitle = cTitle.orEmpty(),
-                        messageId = finalMessageId
-                    )
-                } catch (e: Throwable) {
-                    Log.w(TAG, "Silently handled quote extraction error: ${e.message}")
+                applicationScope.launch(ioDispatcher) {
+                    try {
+                        engine.extractAndSaveQuotesSilently(
+                            passage = trimmedPassage,
+                            bookId = bId,
+                            bookTitle = bTitle.orEmpty(),
+                            author = aName,
+                            chapterId = chapterId,
+                            chapterNumber = cNum,
+                            chapterTitle = cTitle.orEmpty(),
+                            messageId = finalMessageId
+                        )
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "Silently handled quote extraction error: ${e.message}")
+                    }
                 }
             }
 
-            // Silently trigger background Flash-Lite MCQ generator
+            // Asynchronously trigger background Flash-Lite MCQ generator without blocking passage completion
             mcqGenerationEngine?.let { engine ->
-                try {
-                    engine.generateAndSaveMcqsSilently(
-                        passage = trimmedPassage,
-                        explanation = explanation,
-                        bookId = bId,
-                        bookTitle = bTitle,
-                        chapterId = chapterId,
-                        chapterTitle = cTitle,
-                        passageTurnId = finalMessageId
-                    )
-                } catch (e: Throwable) {
-                    Log.w(TAG, "Silently handled MCQ generation error: ${e.message}")
+                applicationScope.launch(ioDispatcher) {
+                    try {
+                        engine.generateAndSaveMcqsSilently(
+                            passage = trimmedPassage,
+                            explanation = explanation,
+                            bookId = bId,
+                            bookTitle = bTitle,
+                            chapterId = chapterId,
+                            chapterTitle = cTitle,
+                            passageTurnId = finalMessageId
+                        )
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "Silently handled MCQ generation error: ${e.message}")
+                    }
                 }
             }
         }.onFailure { error ->

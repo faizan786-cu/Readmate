@@ -1,10 +1,13 @@
 package com.example.data.repository
 
 import android.graphics.RectF
+import android.util.Log
 import com.example.data.local.database.entity.ChapterMessage
 import com.example.data.local.security.SecureApiKeyStorage
 import com.example.data.manager.ApiKeyManager
 import com.example.data.manager.GeminiApiKeyManager
+import com.example.data.manager.PassageExplanationValidator
+import com.example.data.manager.QualityValidationResult
 import com.example.data.model.ExtractedVocabulary
 import com.example.data.model.GeminiApiKeyItem
 import com.example.data.model.GeminiConnectionState
@@ -38,6 +41,7 @@ class GeminiRepository(
 ) {
 
     companion object {
+        private const val TAG = "GeminiRepository"
         private const val STATIC_EXPLANATION_SYSTEM_INSTRUCTION = """You are ReadMate, an expert book reading companion, teacher, and mentor.
 The user is reading books in English and wants to deeply understand what the author is actually trying to communicate.
 
@@ -766,6 +770,9 @@ Return ONLY a valid JSON object with the following schema:
         }
     }
 
+    // Lightweight in-memory OCR snippet cache to avoid expensive re-rendering and re-OCR of identical selections
+    private val ocrSnippetCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     /**
      * High-resolution crops a PDF page region and transcribes its text verbatim using Gemini Flash-Lite Vision.
      */
@@ -776,6 +783,13 @@ Return ONLY a valid JSON object with the following schema:
         viewWidth: Float = 0f,
         viewHeight: Float = 0f
     ): Result<String> = withContext(ioDispatcher) {
+        val cropCacheKey = "$pdfFilePath:$pageIndex:${(cropRectNormalized.left * 1000).toInt()}:${(cropRectNormalized.top * 1000).toInt()}:${(cropRectNormalized.right * 1000).toInt()}:${(cropRectNormalized.bottom * 1000).toInt()}"
+        val cachedText = ocrSnippetCache[cropCacheKey]
+        if (!cachedText.isNullOrBlank()) {
+            Log.d(TAG, "Reusing cached OCR snippet transcription for $cropCacheKey")
+            return@withContext Result.success(cachedText)
+        }
+
         val imageResult = PdfCropUtils.renderAndCropPageToBase64(
             pdfFilePath = pdfFilePath,
             pageIndex = pageIndex,
@@ -786,7 +800,12 @@ Return ONLY a valid JSON object with the following schema:
 
         imageResult.fold(
             onSuccess = { base64Data ->
-                extractTextFromImage(base64Data, mimeType = "image/jpeg")
+                val result = extractTextFromImage(base64Data, mimeType = "image/jpeg")
+                result.onSuccess { extracted ->
+                    if (ocrSnippetCache.size > 100) ocrSnippetCache.clear()
+                    ocrSnippetCache[cropCacheKey] = extracted
+                }
+                result
             },
             onFailure = { error ->
                 Result.failure(error)
@@ -891,36 +910,235 @@ $passage
             )
         )
 
+        val requestStartTime = System.currentTimeMillis()
+        var firstTokenTime: Long? = null
+
         // Stream via Server-Sent Events with Model-First Cross-Key Quota Cascade
         val streamResult = apiKeyManager.streamWithAutoRotation(
             taskType = GeminiTaskType.PASSAGE_ANALYSIS,
             operationName = "explainPassageStream (Flash Tier)",
             request = request,
-            onChunk = onChunk
+            onChunk = { accumulated, chunk ->
+                if (firstTokenTime == null) {
+                    firstTokenTime = System.currentTimeMillis()
+                    Log.d(TAG, "[Timing] Request-start to first SSE token: ${firstTokenTime!! - requestStartTime}ms")
+                }
+                onChunk(accumulated, chunk)
+            }
         )
 
-        if (streamResult.isSuccess) {
-            return@withContext streamResult
-        }
+        val initialExplanationResult: Result<String> = if (streamResult.isSuccess) {
+            val streamFinishTime = System.currentTimeMillis()
+            val firstToken = firstTokenTime ?: streamFinishTime
+            Log.d(TAG, "[Timing] First-token to final token: ${streamFinishTime - firstToken}ms. Total generation time: ${streamFinishTime - requestStartTime}ms")
+            streamResult
+        } else {
+            // Fallback to standard request if streaming encountered a transient transport failure
+            val standardResult = executeWithAutoRotation(GeminiTaskType.PASSAGE_ANALYSIS, "explainPassageFallback") { key, model ->
+                val sanitized = request.sanitizedForModel(model, stripOptionalConfigs = false)
+                val resp = apiService.generateContent(
+                    model = model,
+                    apiKey = key,
+                    request = sanitized
+                )
+                if (resp.code() == 400) {
+                    // If model returns HTTP 400 parameter mismatch, attempt immediate retry with stripped optional parameters
+                    val stripped = request.sanitizedForModel(model, stripOptionalConfigs = true)
+                    try {
+                        val retryResp = apiService.generateContent(
+                            model = model,
+                            apiKey = key,
+                            request = stripped
+                        )
+                        if (retryResp.isSuccessful) retryResp else resp
+                    } catch (_: Exception) { resp }
+                } else {
+                    resp
+                }
+            }
 
-        // Fallback to standard request if streaming encountered a transient transport failure
-        val standardResult = executeWithAutoRotation(GeminiTaskType.PASSAGE_ANALYSIS, "explainPassageFallback") { key, model ->
-            apiService.generateContent(
-                model = model,
-                apiKey = key,
-                request = request.sanitizedForModel(model)
-            )
-        }
-
-        standardResult.mapCatching { response ->
-            val explanation = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-            if (!explanation.isNullOrBlank()) {
-                onChunk(explanation, explanation)
-                explanation
-            } else {
-                throw Exception("Gemini returned an empty response. Please try again.")
+            standardResult.mapCatching { response ->
+                val explanation = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                if (!explanation.isNullOrBlank()) {
+                    onChunk(explanation, explanation)
+                    explanation
+                } else {
+                    throw Exception("Gemini returned an empty response. Please try again.")
+                }
             }
         }
+
+        if (initialExplanationResult.isFailure) {
+            return@withContext initialExplanationResult
+        }
+
+        val initialExplanation = initialExplanationResult.getOrThrow()
+
+        // Deterministic Quality Validation
+        val validation = PassageExplanationValidator.validate(trimmedPassage, initialExplanation)
+        if (validation.isValid) {
+            return@withContext Result.success(initialExplanation)
+        }
+
+        Log.i(TAG, "Passage explanation did not meet quality requirements (${validation.issues}). Attempting single silent repair.")
+
+        // Task 3 & 4: At most ONE silent quality repair attempt using Flash PASSAGE_ANALYSIS pipeline
+        val repairStartTime = System.currentTimeMillis()
+        val repairedExplanation = attemptSilentQualityRepair(
+            passage = trimmedPassage,
+            incompleteExplanation = initialExplanation,
+            validation = validation,
+            bookTitle = bookTitle,
+            chapterTitle = chapterTitle,
+            authorName = authorName,
+            temperature = temperature,
+            onChunk = onChunk
+        )
+        val repairMs = System.currentTimeMillis() - repairStartTime
+        Log.d(TAG, "[Timing] Quality repair time: ${repairMs}ms")
+
+        Result.success(repairedExplanation)
+    }
+
+    private suspend fun attemptSilentQualityRepair(
+        passage: String,
+        incompleteExplanation: String,
+        validation: QualityValidationResult,
+        bookTitle: String? = null,
+        chapterTitle: String? = null,
+        authorName: String? = null,
+        temperature: Float? = null,
+        onChunk: suspend (accumulated: String, chunk: String) -> Unit = { _, _ -> }
+    ): String {
+        return try {
+            val repairPrompt = buildPassageRepairPrompt(
+                passage = passage,
+                incompleteExplanation = incompleteExplanation,
+                validation = validation,
+                bookTitle = bookTitle,
+                chapterTitle = chapterTitle,
+                authorName = authorName
+            )
+
+            val repairRequest = GeminiGenerateContentRequest(
+                contents = listOf(
+                    GeminiContent(parts = listOf(GeminiPart(text = repairPrompt)))
+                ),
+                systemInstruction = GeminiContent(
+                    parts = listOf(GeminiPart(text = STATIC_EXPLANATION_SYSTEM_INSTRUCTION))
+                ),
+                generationConfig = GeminiGenerationConfig.forFlash(
+                    maxOutputTokens = 2500,
+                    temperature = temperature ?: 0.35f
+                )
+            )
+
+            val repairStreamResult = apiKeyManager.streamWithAutoRotation(
+                taskType = GeminiTaskType.PASSAGE_ANALYSIS,
+                operationName = "explainPassageRepair (Flash Tier)",
+                request = repairRequest,
+                onChunk = onChunk
+            )
+
+            val candidateText = if (repairStreamResult.isSuccess) {
+                repairStreamResult.getOrNull()
+            } else {
+                val fallbackResult = executeWithAutoRotation(GeminiTaskType.PASSAGE_ANALYSIS, "explainPassageRepairFallback") { key, model ->
+                    val sanitized = repairRequest.sanitizedForModel(model, stripOptionalConfigs = false)
+                    val resp = apiService.generateContent(
+                        model = model,
+                        apiKey = key,
+                        request = sanitized
+                    )
+                    if (resp.code() == 400) {
+                        val stripped = repairRequest.sanitizedForModel(model, stripOptionalConfigs = true)
+                        try {
+                            val retryResp = apiService.generateContent(
+                                model = model,
+                                apiKey = key,
+                                request = stripped
+                            )
+                            if (retryResp.isSuccessful) retryResp else resp
+                        } catch (_: Exception) { resp }
+                    } else {
+                        resp
+                    }
+                }
+                fallbackResult.getOrNull()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+            }
+
+            if (candidateText.isNullOrBlank()) {
+                Log.w(TAG, "Repair attempt returned empty content. Preserving initial explanation.")
+                return incompleteExplanation
+            }
+
+            val secondValidation = PassageExplanationValidator.validate(passage, candidateText)
+            val isBetter = PassageExplanationValidator.isMeaningfullyBetter(validation, secondValidation)
+
+            if (isBetter) {
+                Log.i(TAG, "Repaired explanation accepted (defect score ${secondValidation.defectScore} vs initial ${validation.defectScore}).")
+                onChunk(candidateText, candidateText)
+                candidateText
+            } else {
+                Log.i(TAG, "Repaired explanation not better than initial (repair defect score ${secondValidation.defectScore} vs initial ${validation.defectScore}). Preserving initial explanation.")
+                incompleteExplanation
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Silent repair encountered exception (${e.message}). Returning initial explanation.", e)
+            incompleteExplanation
+        }
+    }
+
+    private fun buildPassageRepairPrompt(
+        passage: String,
+        incompleteExplanation: String,
+        validation: QualityValidationResult,
+        bookTitle: String? = null,
+        chapterTitle: String? = null,
+        authorName: String? = null
+    ): String {
+        val metaInfo = listOfNotNull(
+            bookTitle?.takeIf { it.isNotBlank() }?.let { "Book: $it" },
+            chapterTitle?.takeIf { it.isNotBlank() }?.let { "Chapter: $it" },
+            authorName?.takeIf { it.isNotBlank() }?.let { "Author: $it" }
+        ).joinToString(" | ")
+
+        val repairGuidance = validation.generateRepairInstructions()
+
+        return """
+            |The previous explanation below is structurally incomplete or lacks the required depth according to ReadMate pedagogical guidelines.
+            |
+            |${if (metaInfo.isNotEmpty()) "CONTEXT: $metaInfo\n" else ""}
+            |ORIGINAL BOOK PASSAGE:
+            |\"\"\"
+            |$passage
+            |\"\"\"
+            |
+            |PREVIOUS DRAFT EXPLANATION:
+            |\"\"\"
+            |$incompleteExplanation
+            |\"\"\"
+            |
+            |QUALITY ISSUES TO ADDRESS:
+            |$repairGuidance
+            |
+            |REPAIR INSTRUCTIONS:
+            |1. Preserve all existing accurate content from the draft. Do not remove valid explanations or change factual meaning.
+            |2. Expand the weak/missing sections so they provide genuine pedagogical depth:
+            |   - Asaan Samjh must thoroughly explain what the author means, why it matters, and how ideas connect (at least 2 rich paragraphs).
+            |   - Main Lesson must clearly articulate the central takeaway (not a vague one-liner).
+            |   - Key Points must contain 3–5 distinct, meaningful insights (no shallow one-word bullets, and no more than 8 bullets).
+            |   - Real-Life Example must present a concrete, relatable real-world scenario demonstrating the concept.
+            |3. Use simple, natural Pakistani Roman Urdu. Strictly avoid heavy/formal Urdu.
+            |4. DO NOT include, repeat, or append the original English passage in your output.
+            |5. Stop your output immediately after completing the Real-Life Example section.
+            |
+            |Output the complete improved explanation now in the strict Markdown structure:
+            |## 🧠 Asaan Samjh
+            |## 💡 Main Lesson
+            |## 🔑 Key Points
+            |## 🌎 Real-Life Example
+        """.trimMargin().trim()
     }
 
     suspend fun explainPassage(

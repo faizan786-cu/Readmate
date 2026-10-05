@@ -200,4 +200,23 @@ object GeminiModelRegistry {
         return modelId.contains("flash-lite", ignoreCase = true) ||
             UTILITY_POOL.any { it.modelId.equals(modelId, ignoreCase = true) }
     }
+
+    /**
+     * Returns true if the model belongs to the Gemini 3 generation (e.g. gemini-3.8-flash, 3.6, 3.5, 3-preview).
+     * Gemini 3 models support thinkingLevel ("LOW", "MINIMAL") and reject thinkingBudget.
+     */
+    fun isGemini3(modelId: String): Boolean {
+        return modelId.contains("gemini-3.", ignoreCase = true) ||
+            modelId.contains("gemini-3-", ignoreCase = true) ||
+            modelId.startsWith("gemini-3", ignoreCase = true)
+    }
+
+    /**
+     * Returns true if the model belongs to the Gemini 2.5 emergency legacy generation (e.g. gemini-2.5-flash).
+     * Gemini 2.5 models support thinkingBudget (e.g. 0 to disable) and reject thinkingLevel.
+     */
+    fun isGemini25(modelId: String): Boolean {
+        return modelId.contains("2.5", ignoreCase = true) ||
+            modelId.contains("2.", ignoreCase = true)
+    }
 }

@@ -179,7 +179,7 @@ fun TestApiDashboardDialog(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Task-Specific Model Routing: Translation uses Flash-Lite (3.1 $\\rightarrow$ 3.5). Passage analysis uses Quality Flash (2.5 $\\rightarrow$ 3.7 $\\rightarrow$ 3.6 $\\rightarrow$ 3.5). Cooldowns are tracked per key + model.",
+                            text = "Task-Specific Model Routing: Translation uses Flash-Lite (3.5 \u2192 3.1 \u2192 2.5). Passage analysis uses Flash (3.8 \u2192 3.6 \u2192 3.5 \u2192 3-preview \u2192 2.5). Cooldowns are tracked per key + model.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

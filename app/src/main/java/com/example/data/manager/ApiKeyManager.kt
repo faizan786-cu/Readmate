@@ -26,6 +26,7 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 interface ApiKeyManager {
     val connectionState: StateFlow<GeminiConnectionState>
@@ -45,6 +46,8 @@ interface ApiKeyManager {
 
     fun isModelInCooldown(keyId: String, modelId: String): Boolean
     fun getModelCooldownRemainingSeconds(keyId: String, modelId: String): Long
+    fun getInFlightCount(keyId: String): Int
+    fun getOrderedKeysForTask(taskType: GeminiTaskType, candidateKeys: List<GeminiApiKeyItem>): List<GeminiApiKeyItem>
 
     suspend fun testConnection(apiKey: String, model: String = GeminiModelRegistry.DEFAULT_MODEL): TestConnectionResult
     suspend fun testSingleKey(keyId: String): TestConnectionResult
@@ -103,6 +106,31 @@ class GeminiApiKeyManager(
 
     // Pool-wide model cooldowns: modelId -> cooldownUntilTimestamp
     private val poolWideModelCooldowns = ConcurrentHashMap<String, Long>()
+
+    // Thread-safe in-flight request tracking: keyId -> AtomicInteger
+    private val inFlightRequestsByKey = ConcurrentHashMap<String, AtomicInteger>()
+
+    override fun getInFlightCount(keyId: String): Int {
+        return inFlightRequestsByKey[keyId]?.get() ?: 0
+    }
+
+    private fun incrementInFlight(keyId: String): Int {
+        return inFlightRequestsByKey.computeIfAbsent(keyId) { AtomicInteger(0) }.incrementAndGet()
+    }
+
+    private fun decrementInFlight(keyId: String): Int {
+        val counter = inFlightRequestsByKey[keyId] ?: return 0
+        return counter.updateAndGet { count -> (count - 1).coerceAtLeast(0) }
+    }
+
+    private inline fun <R> withInFlightTracking(keyId: String, block: () -> R): R {
+        incrementInFlight(keyId)
+        try {
+            return block()
+        } finally {
+            decrementInFlight(keyId)
+        }
+    }
 
     private val _connectionState = MutableStateFlow<GeminiConnectionState>(
         determineInitialState()
@@ -190,6 +218,7 @@ class GeminiApiKeyManager(
 
     override suspend fun removeApiKey(id: String): Boolean = withContext(ioDispatcher) {
         modelCooldowns.keys.filter { it.startsWith("${id}_") }.forEach { modelCooldowns.remove(it) }
+        inFlightRequestsByKey.remove(id)
         val removed = secureStorage.removeApiKey(id)
         if (removed) refreshState()
         removed
@@ -230,6 +259,7 @@ class GeminiApiKeyManager(
         modelCooldowns.clear()
         poolWideModelCooldowns.clear()
         upstreamModelErrors.clear()
+        inFlightRequestsByKey.clear()
         val deleted = secureStorage.clearAllApiKeys()
         if (deleted) {
             _connectionState.value = GeminiConnectionState.NotConnected
@@ -568,35 +598,85 @@ class GeminiApiKeyManager(
     }
 
     /**
-     * Workload Isolation Across Keys:
-     * Dispatches tasks across active keys in the pool according to the workload isolation slot mapping:
-     * - Slot 0 (Key A): Flash passage synthesis (PASSAGE_ANALYSIS)
-     * - Slot 1 (Key B): OCR vision and document structure (VISION_EXTRACTION, PDF_PARSING)
-     * - Slot 2 (Key C): Scenario-based MCQ generation (MCQ_SYNTHESIS)
-     * - Slot 3 (Key D): Wisdom quote extraction and word lookups (WISDOM_QUOTE, WORD_TRANSLATION)
+     * Workload Isolation & Advanced In-Flight Load Balancing Across Keys:
      *
-     * When fewer keys than concurrent tasks exist, distributes calls across idle keys using
-     * least-recently-used selection without hard thread deadlocks.
+     * Dispatches tasks across active keys in the pool according to:
+     * 1. In-flight load tracking: ACTIVE keys with in-flight count = 0 are preferred,
+     *    followed by keys with lowest in-flight count.
+     * 2. Workload isolation slot mapping: Prefers different physical keys for different lanes:
+     *    - Lane A / Slot 0: Flash passage synthesis (PASSAGE_ANALYSIS)
+     *    - Lane B / Slot 1: OCR vision and PDF parsing (VISION_EXTRACTION, PDF_PARSING)
+     *    - Lane C / Slot 2: MCQ generation (MCQ_SYNTHESIS)
+     *    - Lane D / Slot 3: Word translation & Wisdom quotes (WORD_TRANSLATION, WISDOM_QUOTE)
+     * 3. Tie-breaking: Least-recently-used timestamp among keys with equal in-flight load.
+     *
+     * Scales dynamically to any number of configured keys (2, 4, 10, etc.).
+     * If all keys are busy, selects the least-loaded eligible key instead of failing.
      */
-    private fun getOrderedKeysForTask(
+    override fun getOrderedKeysForTask(
         taskType: GeminiTaskType,
         candidateKeys: List<GeminiApiKeyItem>
     ): List<GeminiApiKeyItem> {
         if (candidateKeys.size <= 1) return candidateKeys
 
-        val slot = when (taskType) {
-            GeminiTaskType.PASSAGE_ANALYSIS -> 0
-            GeminiTaskType.VISION_EXTRACTION, GeminiTaskType.PDF_PARSING -> 1
-            GeminiTaskType.MCQ_SYNTHESIS -> 2
-            GeminiTaskType.WISDOM_QUOTE, GeminiTaskType.WORD_TRANSLATION -> 3
+        val allConfiguredKeys = try { secureStorage.getApiKeys() } catch (_: Exception) { emptyList() }
+        val totalConfigured = if (allConfiguredKeys.isNotEmpty()) allConfiguredKeys.size else candidateKeys.size
+
+        // Physical lane slot calculation
+        val preferredTargetCandidate: GeminiApiKeyItem = if (totalConfigured == 2) {
+            // 2 Keys: Key 0 serves Passage; Key 1 serves all utility workloads
+            val targetPhysicalIndex = if (taskType == GeminiTaskType.PASSAGE_ANALYSIS) 0 else 1
+            candidateKeys.firstOrNull { candidate ->
+                val pIdx = allConfiguredKeys.indexOfFirst { it.id == candidate.id }
+                pIdx == targetPhysicalIndex
+            } ?: if (taskType == GeminiTaskType.PASSAGE_ANALYSIS) candidateKeys[0] else candidateKeys.getOrElse(1) { candidateKeys[0] }
+        } else {
+            // >= 3 Keys: Key 0 serves Passage; Keys 1..N distribute utility lanes without key contention
+            val targetPhysicalIndex = if (taskType == GeminiTaskType.PASSAGE_ANALYSIS) {
+                0
+            } else {
+                val utilitySlot = when (taskType) {
+                    GeminiTaskType.VISION_EXTRACTION, GeminiTaskType.PDF_PARSING -> 0
+                    GeminiTaskType.MCQ_SYNTHESIS -> 1
+                    GeminiTaskType.WISDOM_QUOTE, GeminiTaskType.WORD_TRANSLATION -> 2
+                    else -> 0
+                }
+                val utilityCount = (totalConfigured - 1).coerceAtLeast(1)
+                1 + (utilitySlot % utilityCount)
+            }
+
+            candidateKeys.firstOrNull { candidate ->
+                val pIdx = allConfiguredKeys.indexOfFirst { it.id == candidate.id }
+                pIdx == targetPhysicalIndex
+            } ?: run {
+                val utilityCount = (candidateKeys.size - 1).coerceAtLeast(1)
+                val fallbackIdx = if (taskType == GeminiTaskType.PASSAGE_ANALYSIS) {
+                    0
+                } else {
+                    val utilitySlot = when (taskType) {
+                        GeminiTaskType.VISION_EXTRACTION, GeminiTaskType.PDF_PARSING -> 0
+                        GeminiTaskType.MCQ_SYNTHESIS -> 1
+                        GeminiTaskType.WISDOM_QUOTE, GeminiTaskType.WORD_TRANSLATION -> 2
+                        else -> 0
+                    }
+                    1 + (utilitySlot % utilityCount)
+                }
+                candidateKeys.getOrElse(fallbackIdx) { candidateKeys[0] }
+            }
         }
 
-        val preferredIndex = slot % candidateKeys.size
-        val primary = candidateKeys[preferredIndex]
-        val remaining = candidateKeys.filterIndexed { index, _ -> index != preferredIndex }
-            .sortedBy { it.lastUsedTimestamp } // Least-recently-used among remaining keys
+        val ordered = candidateKeys.map { keyItem ->
+            val inFlight = getInFlightCount(keyItem.id)
+            val isPreferredLaneKey = (keyItem.id == preferredTargetCandidate.id)
+            Triple(keyItem, inFlight, isPreferredLaneKey)
+        }.sortedWith(
+            compareBy<Triple<GeminiApiKeyItem, Int, Boolean>> { it.second } // 1. Active keys with lowest in-flight count (0 first)
+                .thenByDescending { it.third } // 2. Preferred physical lane key if equal in-flight load
+                .thenBy { it.first.lastUsedTimestamp } // 3. Least-recently-used timestamp
+        ).map { it.first }
 
-        return listOf(primary) + remaining
+        Log.d(TAG, "[$taskType] Load-balanced key selection: ${ordered.map { "${it.id.take(6)}(in-flight=${getInFlightCount(it.id)})" }}")
+        return ordered
     }
 
     /**
@@ -676,120 +756,143 @@ class GeminiApiKeyManager(
                 var backoff = RETRY_BACKOFF_BASE_MS
                 var retryCount = 0
 
-                while (retryCount <= MAX_SERVER_ERROR_RETRIES) {
-                    try {
-                        val response = block(keyItem.key.trim(), modelId)
+                val inFlight = getInFlightCount(keyItem.id) + 1
+                Log.d(TAG, "[$taskType] Dispatched to Model: $modelId, Key: ${keyItem.id.take(8)} (${keyItem.maskedKey}), In-flight: $inFlight")
 
-                        if (response.isSuccessful) {
-                            val body = response.body()
-                            if (body != null) {
-                                // Model & key healthy
-                                modelCooldowns.remove(cooldownKey)
-                                recordSuccess(keyItem)
-                                return@withContext Result.success(body)
-                            } else {
-                                lastException = Exception("Gemini returned an empty response on $modelId.")
-                                break
-                            }
-                        } else {
-                            val code = response.code()
-                            val errorBody = try { response.errorBody()?.string().orEmpty() } catch (_: Exception) { "" }
+                val successBody: T? = withInFlightTracking(keyItem.id) {
+                    while (retryCount <= MAX_SERVER_ERROR_RETRIES) {
+                        try {
+                            val response = block(keyItem.key.trim(), modelId)
 
-                            // 1. HTTP 429: Localized Quota Cooldown strictly to this (Key, Model) pair.
-                            // Keep the key active for other available models; rotate immediately to NEXT key for SAME model.
-                            val isRateLimit = code == 429 ||
-                                errorBody.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
-                                errorBody.contains("quota", ignoreCase = true)
-
-                            if (isRateLimit) {
-                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                                recordRateLimit(keyItem, modelId)
-                                lastException = Exception("Quota exceeded on $modelId (HTTP 429).")
-                                break // Rotate immediately to NEXT key for the SAME top-priority model
-                            }
-
-                            // 2. HTTP 401 / 403: Permanently mark key invalid or permission denied, rotate to next key
-                            if (code == 401 || (code == 400 && (errorBody.contains("API_KEY_INVALID", ignoreCase = true) || errorBody.contains("UNAUTHENTICATED", ignoreCase = true)))) {
-                                recordKeyInvalid(keyItem, "Invalid or expired API key (HTTP $code)")
-                                lastException = Exception("Gemini API key is invalid or expired (HTTP $code).")
-                                break
-                            }
-
-                            if (code == 403) {
-                                recordKeyPermissionError(keyItem, "Permission error (HTTP 403)")
-                                lastException = Exception("Gemini API key rejected due to permission/billing issue (HTTP 403).")
-                                break
-                            }
-
-                            // 3. HTTP 500 / 503 / 504 / 408: Silent rapid retries on same key and model before shifting
-                            if (code in listOf(500, 503, 504, 408)) {
-                                if (retryCount < MAX_SERVER_ERROR_RETRIES) {
-                                    retryCount++
-                                    delay(backoff)
-                                    backoff *= 2
-                                    continue
+                            if (response.isSuccessful) {
+                                val body = response.body()
+                                if (body != null) {
+                                    // Model & key healthy
+                                    modelCooldowns.remove(cooldownKey)
+                                    recordSuccess(keyItem)
+                                    return@withInFlightTracking body
                                 } else {
-                                    if (code == 503) {
-                                        record503Error(keyItem)
-                                        return@withContext Result.failure(Exception("Gemini service temporarily overloaded (HTTP 503)."))
-                                    }
-                                    recordUpstreamError(modelId, keyItem.id)
-                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                                    lastException = Exception("Gemini server error on $modelId (HTTP $code).")
+                                    lastException = Exception("Gemini returned an empty response on $modelId.")
                                     break
                                 }
-                            }
+                            } else {
+                                val code = response.code()
+                                val errorBody = try { response.errorBody()?.string().orEmpty() } catch (_: Exception) { "" }
 
-                            // 4. HTTP 404: Endpoint / model retired or unavailable
-                            if (code == 404) {
-                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + (COOLDOWN_DURATION_MS * 5)
-                                lastException = Exception(extractGeminiErrorMessage(404, errorBody))
-                                break // Proceed to next key or step down model
-                            }
+                                // 1. HTTP 429: Localized Quota Cooldown strictly to this (Key, Model) pair.
+                                // Keep the key active for other available models; rotate immediately to NEXT key for SAME model.
+                                val isRateLimit = code == 429 ||
+                                    errorBody.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+                                    errorBody.contains("quota", ignoreCase = true)
 
-                            // 5. HTTP 400: Client request error or parameter mismatch
-                            if (code == 400) {
-                                val message = extractGeminiErrorMessage(400, errorBody)
-                                Log.w(TAG, "HTTP 400 parameter mismatch on model $modelId: $message. Tripping localized cooldown and triggering auto-recovery cascade.")
+                                if (isRateLimit) {
+                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                    recordRateLimit(keyItem, modelId)
+                                    lastException = Exception("Quota exceeded on $modelId (HTTP 429).")
+                                    Log.w(TAG, "[$taskType] Quota exceeded on $modelId with Key ${keyItem.id.take(8)} (${keyItem.maskedKey}) [HTTP 429]. Rotating to next key.")
+                                    break // Rotate immediately to NEXT key for the SAME top-priority model
+                                }
+
+                                // 2. HTTP 401 / 403: Permanently mark key invalid or permission denied, rotate to next key
+                                if (code == 401 || (code == 400 && (errorBody.contains("API_KEY_INVALID", ignoreCase = true) || errorBody.contains("UNAUTHENTICATED", ignoreCase = true)))) {
+                                    recordKeyInvalid(keyItem, "Invalid or expired API key (HTTP $code)")
+                                    lastException = Exception("Gemini API key is invalid or expired (HTTP $code).")
+                                    Log.w(TAG, "[$taskType] HTTP $code invalid key on ${keyItem.id.take(8)}. Rotating to next key.")
+                                    break
+                                }
+
+                                if (code == 403) {
+                                    recordKeyPermissionError(keyItem, "Permission error (HTTP 403)")
+                                    lastException = Exception("Gemini API key rejected due to permission/billing issue (HTTP 403).")
+                                    Log.w(TAG, "[$taskType] HTTP 403 permission error on ${keyItem.id.take(8)}. Rotating to next key.")
+                                    break
+                                }
+
+                                // 3. HTTP 500 / 503 / 504 / 408: Silent rapid retries on same key and model before shifting
+                                if (code in listOf(500, 503, 504, 408)) {
+                                    if (retryCount < MAX_SERVER_ERROR_RETRIES) {
+                                        retryCount++
+                                        delay(backoff)
+                                        backoff *= 2
+                                        continue
+                                    } else {
+                                        if (code == 503) {
+                                            record503Error(keyItem)
+                                        } else {
+                                            recordUpstreamError(modelId, keyItem.id)
+                                        }
+                                        modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                        lastException = Exception(
+                                            if (code == 503) {
+                                                "Gemini service temporarily overloaded (HTTP 503) on $modelId."
+                                            } else {
+                                                "Gemini server error on $modelId (HTTP $code)."
+                                            }
+                                        )
+                                        Log.w(TAG, "[$taskType] HTTP $code exhausted retries on ${keyItem.id.take(8)} ($modelId). Rotating to next key.")
+                                        break // Rotate to NEXT available key on the SAME model
+                                    }
+                                }
+
+                                // 4. HTTP 404: Endpoint / model retired or unavailable
+                                if (code == 404) {
+                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + (COOLDOWN_DURATION_MS * 5)
+                                    lastException = Exception(extractGeminiErrorMessage(404, errorBody))
+                                    break // Proceed to next key or step down model
+                                }
+
+                                // 5. HTTP 400: Client request error or parameter mismatch
+                                if (code == 400) {
+                                    val message = extractGeminiErrorMessage(400, errorBody)
+                                    Log.w(TAG, "HTTP 400 parameter mismatch on model $modelId: $message. Tripping localized cooldown and triggering auto-recovery cascade.")
+                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                    lastException = Exception("Parameter mismatch ($modelId): $message")
+                                    break // Seamlessly cascade to next key or fallback to next model in hierarchy!
+                                }
+
+                                // General failure
                                 modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                                lastException = Exception("Parameter mismatch ($modelId): $message")
-                                break // Seamlessly cascade to next key or fallback to next model in hierarchy!
+                                lastException = Exception("Gemini service error (HTTP $code) on $modelId.")
+                                break
                             }
-
-                            // General failure
-                            modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                            lastException = Exception("Gemini service error (HTTP $code) on $modelId.")
+                        } catch (e: UnknownHostException) {
+                            return@withContext Result.failure(Exception("Could not connect to Gemini. Check your internet connection."))
+                        } catch (e: SocketTimeoutException) {
+                            recordUpstreamError(modelId, keyItem.id)
+                            if (retryCount < MAX_SERVER_ERROR_RETRIES) {
+                                retryCount++
+                                delay(backoff)
+                                backoff *= 2
+                                continue
+                            } else {
+                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                lastException = Exception("Connection timed out on $modelId. Check your internet connection.")
+                                break
+                            }
+                        } catch (e: IOException) {
+                            if (retryCount < MAX_SERVER_ERROR_RETRIES) {
+                                retryCount++
+                                delay(backoff)
+                                backoff *= 2
+                                continue
+                            } else {
+                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                lastException = Exception("Network error while contacting Gemini ($modelId): ${e.message}")
+                                break
+                            }
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) {
+                                throw e
+                            }
+                            lastException = e
                             break
                         }
-                    } catch (e: UnknownHostException) {
-                        return@withContext Result.failure(Exception("Could not connect to Gemini. Check your internet connection."))
-                    } catch (e: SocketTimeoutException) {
-                        recordUpstreamError(modelId, keyItem.id)
-                        if (retryCount < MAX_SERVER_ERROR_RETRIES) {
-                            retryCount++
-                            delay(backoff)
-                            backoff *= 2
-                            continue
-                        } else {
-                            modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                            lastException = Exception("Connection timed out on $modelId. Check your internet connection.")
-                            break
-                        }
-                    } catch (e: IOException) {
-                        if (retryCount < MAX_SERVER_ERROR_RETRIES) {
-                            retryCount++
-                            delay(backoff)
-                            backoff *= 2
-                            continue
-                        } else {
-                            modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                            lastException = Exception("Network error while contacting Gemini ($modelId): ${e.message}")
-                            break
-                        }
-                    } catch (e: Exception) {
-                        lastException = e
-                        break
                     }
+                    null
+                }
+
+                if (successBody != null) {
+                    return@withContext Result.success(successBody)
                 }
             }
             // Step-down condition: top-priority model exhausted across ALL active keys -> loops to next modelId in ladder
@@ -854,87 +957,32 @@ class GeminiApiKeyManager(
                 var backoff = RETRY_BACKOFF_BASE_MS
                 var retryCount = 0
 
+                val inFlight = getInFlightCount(keyItem.id) + 1
+                Log.d(TAG, "[$taskType] Streaming dispatched -> Model: $modelId, Key: ${keyItem.id.take(8)} (${keyItem.maskedKey}), In-flight: $inFlight")
+
                 val sanitizedRequest = request.sanitizedForModel(modelId, stripOptionalConfigs = false)
-                while (retryCount <= MAX_SERVER_ERROR_RETRIES) {
-                    try {
-                        val response: Response<ResponseBody> = apiService.streamGenerateContent(
-                            model = modelId,
-                            apiKey = keyItem.key.trim(),
-                            request = sanitizedRequest
-                        )
+                val streamCallStart = System.currentTimeMillis()
+                var firstTokenLogged = false
+                val fullTextSuccess: String? = withInFlightTracking(keyItem.id) {
+                    while (retryCount <= MAX_SERVER_ERROR_RETRIES) {
+                        try {
+                            val response: Response<ResponseBody> = apiService.streamGenerateContent(
+                                model = modelId,
+                                apiKey = keyItem.key.trim(),
+                                request = sanitizedRequest
+                            )
 
-                        if (response.isSuccessful) {
-                            val responseBody = response.body()
-                            if (responseBody != null) {
-                                val accumulatedBuilder = StringBuilder()
-                                val reader = responseBody.byteStream().bufferedReader()
-                                var line: String? = reader.readLine()
+                            val networkResponseMs = System.currentTimeMillis() - streamCallStart
+                            Log.d(TAG, "[$taskType] [Timing] Request-start to first network response: ${networkResponseMs}ms")
 
-                                while (line != null) {
-                                    val trimmed = line.trim()
-                                    if (trimmed.startsWith("data:")) {
-                                        val dataJson = trimmed.removePrefix("data:").trim()
-                                        if (dataJson.isNotEmpty() && dataJson != "[DONE]") {
-                                            val chunkText = extractTextChunkFromEventJson(dataJson)
-                                            if (chunkText.isNotEmpty()) {
-                                                accumulatedBuilder.append(chunkText)
-                                                onChunk(accumulatedBuilder.toString(), chunkText)
-                                            }
-                                        }
-                                    }
-                                    line = reader.readLine()
-                                }
-
-                                val fullText = accumulatedBuilder.toString().trim()
-                                if (fullText.isNotEmpty()) {
-                                    modelCooldowns.remove(cooldownKey)
-                                    recordSuccess(keyItem)
-                                    return@withContext Result.success(fullText)
-                                } else {
-                                    lastException = Exception("Gemini returned empty streaming content on $modelId.")
-                                    break
-                                }
-                            } else {
-                                lastException = Exception("Empty streaming body on $modelId.")
-                                break
-                            }
-                        } else {
-                            val code = response.code()
-                            val errorBody = try { response.errorBody()?.string().orEmpty() } catch (_: Exception) { "" }
-
-                            if (code == 429 || errorBody.contains("RESOURCE_EXHAUSTED", ignoreCase = true) || errorBody.contains("quota", ignoreCase = true)) {
-                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                                recordRateLimit(keyItem, modelId)
-                                lastException = Exception("Quota exceeded on $modelId (HTTP 429).")
-                                break // Rotate to NEXT key for same model
-                            }
-
-                            if (code in listOf(401, 403)) {
-                                if (code == 401) recordKeyInvalid(keyItem, "Invalid API key (HTTP 401)")
-                                else recordKeyPermissionError(keyItem, "Permission error (HTTP 403)")
-                                lastException = Exception("Authentication error on key (HTTP $code).")
-                                break
-                            }
-
-                            // HTTP 400: Parameter mismatch - immediate failover with stripped optional configs
-                            if (code == 400) {
-                                val message = extractGeminiErrorMessage(400, errorBody)
-                                Log.w(TAG, "HTTP 400 on $modelId: $message. Attempting stripped parameter failover retry.")
-                                val strippedRequest = request.sanitizedForModel(modelId, stripOptionalConfigs = true)
-                                val fallbackResponse: Response<ResponseBody>? = try {
-                                    apiService.streamGenerateContent(
-                                        model = modelId,
-                                        apiKey = keyItem.key.trim(),
-                                        request = strippedRequest
-                                    )
-                                } catch (_: Exception) { null }
-
-                                if (fallbackResponse != null && fallbackResponse.isSuccessful) {
-                                    val fbBody = fallbackResponse.body()
-                                    if (fbBody != null) {
+                            if (response.isSuccessful) {
+                                val responseBody = response.body()
+                                if (responseBody != null) {
+                                    val fullText = responseBody.use { body ->
                                         val accumulatedBuilder = StringBuilder()
-                                        val reader = fbBody.byteStream().bufferedReader()
+                                        val reader = body.byteStream().bufferedReader()
                                         var line: String? = reader.readLine()
+
                                         while (line != null) {
                                             val trimmed = line.trim()
                                             if (trimmed.startsWith("data:")) {
@@ -942,6 +990,11 @@ class GeminiApiKeyManager(
                                                 if (dataJson.isNotEmpty() && dataJson != "[DONE]") {
                                                     val chunkText = extractTextChunkFromEventJson(dataJson)
                                                     if (chunkText.isNotEmpty()) {
+                                                        if (!firstTokenLogged) {
+                                                            firstTokenLogged = true
+                                                            val firstTokenMs = System.currentTimeMillis() - streamCallStart
+                                                            Log.d(TAG, "[$taskType] [Timing] Request-start to first SSE token: ${firstTokenMs}ms")
+                                                        }
                                                         accumulatedBuilder.append(chunkText)
                                                         onChunk(accumulatedBuilder.toString(), chunkText)
                                                     }
@@ -949,61 +1002,147 @@ class GeminiApiKeyManager(
                                             }
                                             line = reader.readLine()
                                         }
-                                        val fullText = accumulatedBuilder.toString().trim()
-                                        if (fullText.isNotEmpty()) {
-                                            modelCooldowns.remove(cooldownKey)
-                                            recordSuccess(keyItem)
-                                            return@withContext Result.success(fullText)
-                                        }
+                                        accumulatedBuilder.toString().trim()
                                     }
-                                }
 
-                                // Mark cooldown for this specific (key, model) pair and cascade to next key / fallback model
-                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                                lastException = Exception("Parameter mismatch on $modelId: $message")
-                                break // Rotate to NEXT key or step down model in ladder
-                            }
-
-                            if (code in listOf(500, 503, 504, 408)) {
-                                if (retryCount < MAX_SERVER_ERROR_RETRIES) {
-                                    retryCount++
-                                    delay(backoff)
-                                    backoff *= 2
-                                    continue
+                                    if (fullText.isNotEmpty()) {
+                                        modelCooldowns.remove(cooldownKey)
+                                        recordSuccess(keyItem)
+                                        return@withInFlightTracking fullText
+                                    } else {
+                                        lastException = Exception("Gemini returned empty streaming content on $modelId.")
+                                        break
+                                    }
                                 } else {
-                                    if (code == 503) {
-                                        record503Error(keyItem)
-                                        return@withContext Result.failure(Exception("Gemini service temporarily overloaded (HTTP 503)."))
-                                    }
-                                    recordUpstreamError(modelId, keyItem.id)
-                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                                    lastException = Exception("Server error on $modelId (HTTP $code).")
+                                    lastException = Exception("Empty streaming body on $modelId.")
                                     break
                                 }
-                            }
+                            } else {
+                                val code = response.code()
+                                val errorBody = try { response.errorBody()?.string().orEmpty() } catch (_: Exception) { "" }
 
-                            modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                            lastException = Exception("API error $code on $modelId.")
+                                if (code == 429 || errorBody.contains("RESOURCE_EXHAUSTED", ignoreCase = true) || errorBody.contains("quota", ignoreCase = true)) {
+                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                    recordRateLimit(keyItem, modelId)
+                                    lastException = Exception("Quota exceeded on $modelId (HTTP 429).")
+                                    Log.w(TAG, "[$taskType] HTTP 429 streaming quota on Model $modelId with Key ${keyItem.id.take(8)} (${keyItem.maskedKey}). Rotating to next key.")
+                                    break // Rotate to NEXT key for same model
+                                }
+
+                                if (code in listOf(401, 403)) {
+                                    if (code == 401) recordKeyInvalid(keyItem, "Invalid API key (HTTP 401)")
+                                    else recordKeyPermissionError(keyItem, "Permission error (HTTP 403)")
+                                    lastException = Exception("Authentication error on key (HTTP $code).")
+                                    Log.w(TAG, "[$taskType] HTTP $code streaming auth error on ${keyItem.id.take(8)}. Rotating to next key.")
+                                    break
+                                }
+
+                                // HTTP 400: Parameter mismatch - immediate failover with stripped optional configs
+                                if (code == 400) {
+                                    val message = extractGeminiErrorMessage(400, errorBody)
+                                    Log.w(TAG, "HTTP 400 on $modelId: $message. Attempting stripped parameter failover retry.")
+                                    val strippedRequest = request.sanitizedForModel(modelId, stripOptionalConfigs = true)
+                                    val fallbackResponse: Response<ResponseBody>? = try {
+                                        apiService.streamGenerateContent(
+                                            model = modelId,
+                                            apiKey = keyItem.key.trim(),
+                                            request = strippedRequest
+                                        )
+                                    } catch (_: Exception) { null }
+
+                                    if (fallbackResponse != null && fallbackResponse.isSuccessful) {
+                                        val fbBody = fallbackResponse.body()
+                                        if (fbBody != null) {
+                                            val fullText = fbBody.use { body ->
+                                                val accumulatedBuilder = StringBuilder()
+                                                val reader = body.byteStream().bufferedReader()
+                                                var line: String? = reader.readLine()
+                                                while (line != null) {
+                                                    val trimmed = line.trim()
+                                                    if (trimmed.startsWith("data:")) {
+                                                        val dataJson = trimmed.removePrefix("data:").trim()
+                                                        if (dataJson.isNotEmpty() && dataJson != "[DONE]") {
+                                                            val chunkText = extractTextChunkFromEventJson(dataJson)
+                                                            if (chunkText.isNotEmpty()) {
+                                                                accumulatedBuilder.append(chunkText)
+                                                                onChunk(accumulatedBuilder.toString(), chunkText)
+                                                            }
+                                                        }
+                                                    }
+                                                    line = reader.readLine()
+                                                }
+                                                accumulatedBuilder.toString().trim()
+                                            }
+                                            if (fullText.isNotEmpty()) {
+                                                modelCooldowns.remove(cooldownKey)
+                                                recordSuccess(keyItem)
+                                                return@withInFlightTracking fullText
+                                            }
+                                        }
+                                    }
+
+                                    // Mark cooldown for this specific (key, model) pair and cascade to next key / fallback model
+                                    modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                    lastException = Exception("Parameter mismatch on $modelId: $message")
+                                    break // Rotate to NEXT key or step down model in ladder
+                                }
+
+                                if (code in listOf(500, 503, 504, 408)) {
+                                    if (retryCount < MAX_SERVER_ERROR_RETRIES) {
+                                        retryCount++
+                                        delay(backoff)
+                                        backoff *= 2
+                                        continue
+                                    } else {
+                                        if (code == 503) {
+                                            record503Error(keyItem)
+                                        } else {
+                                            recordUpstreamError(modelId, keyItem.id)
+                                        }
+                                        modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                        lastException = Exception(
+                                            if (code == 503) {
+                                                "Gemini service temporarily overloaded (HTTP 503) on $modelId."
+                                            } else {
+                                                "Server error on $modelId (HTTP $code)."
+                                            }
+                                        )
+                                        Log.w(TAG, "[$taskType] HTTP $code streaming exhausted retries on ${keyItem.id.take(8)} ($modelId). Rotating to next key.")
+                                        break // Rotate to NEXT available key on the SAME model
+                                    }
+                                }
+
+                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                lastException = Exception("API error $code on $modelId.")
+                                break
+                            }
+                        } catch (e: UnknownHostException) {
+                            return@withContext Result.failure(Exception("Could not connect to Gemini. Check your internet connection."))
+                        } catch (e: SocketTimeoutException) {
+                            recordUpstreamError(modelId, keyItem.id)
+                            if (retryCount < MAX_SERVER_ERROR_RETRIES) {
+                                retryCount++
+                                delay(backoff)
+                                backoff *= 2
+                                continue
+                            } else {
+                                modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
+                                lastException = Exception("Timeout on $modelId.")
+                                break
+                            }
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) {
+                                throw e
+                            }
+                            lastException = e
                             break
                         }
-                    } catch (e: UnknownHostException) {
-                        return@withContext Result.failure(Exception("Could not connect to Gemini. Check your internet connection."))
-                    } catch (e: SocketTimeoutException) {
-                        recordUpstreamError(modelId, keyItem.id)
-                        if (retryCount < MAX_SERVER_ERROR_RETRIES) {
-                            retryCount++
-                            delay(backoff)
-                            backoff *= 2
-                            continue
-                        } else {
-                            modelCooldowns[cooldownKey] = System.currentTimeMillis() + COOLDOWN_DURATION_MS
-                            lastException = Exception("Timeout on $modelId.")
-                            break
-                        }
-                    } catch (e: Exception) {
-                        lastException = e
-                        break
                     }
+                    null
+                }
+
+                if (fullTextSuccess != null) {
+                    return@withContext Result.success(fullTextSuccess)
                 }
             }
         }

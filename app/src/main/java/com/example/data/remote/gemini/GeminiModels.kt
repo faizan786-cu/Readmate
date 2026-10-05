@@ -6,7 +6,8 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class GeminiThinkingConfig(
-    @Json(name = "thinkingBudget") val thinkingBudget: Int? = 0
+    @Json(name = "thinkingBudget") val thinkingBudget: Int? = null,
+    @Json(name = "thinkingLevel") val thinkingLevel: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -19,7 +20,7 @@ data class GeminiGenerationConfig(
 ) {
     companion object {
         /**
-         * Heavy Analysis Tier (Flash Pipeline) configuration with thinking budget disabled (0)
+         * Heavy Analysis Tier (Flash Pipeline) configuration with low thinking level
          * to prioritize instant streaming responsiveness.
          */
         fun forFlash(
@@ -30,7 +31,7 @@ data class GeminiGenerationConfig(
             temperature = temperature,
             maxOutputTokens = maxOutputTokens,
             responseMimeType = responseMimeType,
-            thinkingConfig = GeminiThinkingConfig(thinkingBudget = 0)
+            thinkingConfig = GeminiThinkingConfig(thinkingLevel = "LOW", thinkingBudget = null)
         )
 
         /**
@@ -70,7 +71,9 @@ data class GeminiGenerateContentRequest(
     /**
      * Sanitizes request payload according to the target Gemini model:
      * - Strips thinkingConfig completely for all Flash-Lite models (HTTP 400 prevention).
-     * - Safeguards systemInstruction: omitted entirely if blank/empty instead of empty object.
+     * - Configures thinkingLevel for Gemini 3 Flash models ("LOW", thinkingBudget = null).
+     * - Configures thinkingBudget for Gemini 2.5 Flash emergency fallback (thinkingBudget = 0, thinkingLevel = null).
+     * - Safeguards systemInstruction: omitted entirely if blank/empty instead of empty object; always preserved during fallback.
      * - Guarantees non-blank text and valid base64 image data parts.
      * - If stripOptionalConfigs is true (HTTP 400 recovery), strips responseMimeType and extra parameters.
      */
@@ -106,21 +109,18 @@ data class GeminiGenerateContentRequest(
             listOf(GeminiContent(parts = listOf(GeminiPart(text = "Hello"))))
         }
 
-        val cleanSystemInstruction = if (stripOptionalConfigs) {
-            null
-        } else {
-            systemInstruction?.let { si ->
-                val validParts = si.parts.mapNotNull { part ->
-                    when {
-                        part.inlineData != null -> part
-                        !part.text.isNullOrBlank() -> GeminiPart(text = part.text.trim())
-                        else -> null
-                    }
+        // Always preserve systemInstruction (e.g. ReadMate teaching prompt), ensuring non-empty parts
+        val cleanSystemInstruction = systemInstruction?.let { si ->
+            val validParts = si.parts.mapNotNull { part ->
+                when {
+                    part.inlineData != null -> part
+                    !part.text.isNullOrBlank() -> GeminiPart(text = part.text.trim())
+                    else -> null
                 }
-                if (validParts.isNotEmpty()) {
-                    GeminiContent(parts = validParts, role = si.role?.takeIf { it.isNotBlank() })
-                } else null
             }
+            if (validParts.isNotEmpty()) {
+                GeminiContent(parts = validParts, role = si.role?.takeIf { it.isNotBlank() })
+            } else null
         }
 
         val cleanGenerationConfig = if (stripOptionalConfigs) {
@@ -134,10 +134,29 @@ data class GeminiGenerateContentRequest(
             }
         } else {
             generationConfig?.let { cfg ->
-                if (isLite) {
-                    cfg.copy(thinkingConfig = null)
-                } else {
-                    cfg
+                when {
+                    // Flash-Lite utility models: strictly omit thinkingConfig completely
+                    isLite -> cfg.copy(thinkingConfig = null)
+
+                    // Gemini 3 Flash models (gemini-3.8-flash, 3.6, 3.5, 3-preview):
+                    // Use thinkingLevel = "LOW", thinkingBudget = null
+                    GeminiModelRegistry.isGemini3(modelId) -> cfg.copy(
+                        thinkingConfig = GeminiThinkingConfig(
+                            thinkingLevel = "LOW",
+                            thinkingBudget = null
+                        )
+                    )
+
+                    // Gemini 2.5 Flash emergency fallback:
+                    // Use thinkingBudget = 0, thinkingLevel = null
+                    GeminiModelRegistry.isGemini25(modelId) -> cfg.copy(
+                        thinkingConfig = GeminiThinkingConfig(
+                            thinkingBudget = 0,
+                            thinkingLevel = null
+                        )
+                    )
+
+                    else -> cfg.copy(thinkingConfig = null)
                 }
             }
         }
