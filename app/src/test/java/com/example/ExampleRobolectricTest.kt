@@ -2106,13 +2106,13 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
 
         val fullyValidRepair = """
             ## 🧠 Asaan Samjh
-            Author yahan sarmayakari aur bachat ka sab se ahem usool bayan kar raha hai ke aam tor par log pehle tamam kharchay karte hain aur agar aakhir mein kuch bacha to save karte hain, jo ke ghair-moassir tareeqa hai.
+            Author yahan sarmayakari aur bachat ka sab se ahem usool bayan kar raha hai ke aam tor par log pehle tamam kharchay karte hain aur agar aakhir mein kuch bacha to save karte hain, jo ke ghair-moassir tareeqa hai. Asal kamyabi is baat mein hai ke aap aamdani aate hi sab se pehle apne mustaqbil ke liye bachat alag karein.
 
-            Sahi hikmat-e-amli ye hai ke salary ya aamdani aate hi pehle tay shuda raqam bachat ke account mein muntaqil ki jaye, aur baqi bachi hui raqam se mahinay ke ikhrajat chalaye jayen. Is se mustaqbil mehfooz hota hai aur insan be-fuzool ikhrajat se bacha rehta hai.
+            Sahi hikmat-e-amli ye hai ke salary ya aamdani aate hi pehle tay shuda raqam bachat ke account mein muntaqil ki jaye, aur baqi bachi hui raqam se mahinay ke ikhrajat chalaye jayen. Is se mustaqbil mehfooz hota hai aur insan be-fuzool ikhrajat se bacha rehta hai kyunke mehdood raqam behtar discipline sikhati hai.
 
-            Jab aap pehle kharch karte hain to zehni tor par aap ke paas hamesha paisa kam parh jata hai kyunke insani khwahishat ki koi intiha nahi hoti. Har naya kharcha zaroori lagne lagta hai aur bachat ka khawab hamesha adhoora reh jata hai.
+            Jab aap pehle kharch karte hain to zehni tor par aap ke paas hamesha paisa kam parh jata hai kyunke insani khwahishat ki koi intiha nahi hoti. Har naya kharcha zaroori lagne lagta hai aur bachat ka khawab hamesha adhoora reh jata hai jis se maashi be-itminani barhti hai.
 
-            Is ke bar-aks jab aap bachat ko pehli tarjeeh banate hain to aap apne aap ko ek qanoon ka paband banate hain. Bachi hui raqam mein guzar basar karna shuru mein mushkil lagta hai lekin yehi aadat lambay arsay mein azeem maashi azaadi ka sabab banti hai.
+            Is ke bar-aks jab aap bachat ko pehli tarjeeh banate hain to aap apne aap ko ek qanoon ka paband banate hain. Bachi hui raqam mein guzar basar karna shuru mein mushkil lagta hai lekin yehi aadat lambay arsay mein azeem maashi azaadi ka sabab banti hai aur sakht waqt mein sahara deti hai.
 
             ## 💡 Main Lesson
             Apne mustaqbil ko hamesha pehli tarjeeh banayein aur har maah apni bachat ko zaroori ikhrajat se pehle alag karna lazmi banayein taake mali azaadi haasil ho sakay. Jab aap pehle bachat karte hain to aap apne maashi nizam ko mehfooz banate hain aur anay walay bohran ke liye tayyar rehte hain.
@@ -4278,6 +4278,85 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         assertEquals("ORIGINAL PASSAGE • PAGES 12, 13", sanitized.pageLabel)
         assertEquals(combined, sanitized.cleanText)
     }
+
+    @Test
+    fun `phase 2_5 repair prompt preserves latest 5 bounded historical contexts and full current passage`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        val geminiRepo = com.example.data.repository.GeminiRepository(storage)
+
+        val history = (1..7).map { i ->
+            com.example.data.local.database.entity.ChapterMessage(
+                id = i.toLong(),
+                chapterId = 77L,
+                originalText = "repair-history-source-$i " + "S".repeat(200),
+                aiResponse = """
+                    ## 🧠 Asaan Samjh
+                    repair-understanding-$i ${"U$i ".repeat(120)}
+
+                    ## 💡 Main Lesson
+                    repair-lesson-$i ${"L$i ".repeat(60)}
+
+                    ## 🔑 Key Points
+                    • **Point $i**: repair-insight-$i ${"K$i ".repeat(60)}
+
+                    ## 🌎 Real-Life Example
+                    repair-example-$i ${"E$i ".repeat(60)}
+                """.trimIndent()
+            )
+        }
+
+        val currentPassage = "CURRENT_REPAIR_PASSAGE_" + "P".repeat(1200)
+        val shallowDraft = """
+            ## 🧠 Asaan Samjh
+            Bohat choti samjh.
+            ## 💡 Main Lesson
+            Chota lesson.
+            ## 🔑 Key Points
+            • **Point**: Chota point.
+            ## 🌎 Real-Life Example
+            Choti misaal.
+        """.trimIndent()
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(currentPassage, shallowDraft)
+
+        val prompt = geminiRepo.buildPassageRepairPrompt(
+            passage = currentPassage,
+            incompleteExplanation = shallowDraft,
+            validation = validation,
+            conversationHistory = history,
+            bookTitle = "Repair Book",
+            chapterTitle = "Repair Chapter"
+        )
+
+        assertFalse("Oldest turn #1 must be excluded from repair context", prompt.contains("repair-history-source-1"))
+        assertFalse("Oldest turn #2 must be excluded from repair context", prompt.contains("repair-history-source-2"))
+        assertTrue("Latest turn #3 must be included", prompt.contains("repair-history-source-3"))
+        assertTrue("Newest turn #7 must be included", prompt.contains("repair-history-source-7"))
+        assertTrue("Current passage must remain verbatim in repair prompt", prompt.contains(currentPassage))
+        assertTrue("Repair prompt must explicitly prioritize current passage", prompt.contains("CURRENT PASSAGE ALWAYS WINS"))
+
+        val historicalBlock = prompt.substringAfter("<RECENT_READING_CONTEXT>").substringBefore("</RECENT_READING_CONTEXT>")
+        assertTrue(
+            "Repair historical context must remain within the same 16k global budget",
+            historicalBlock.length <= com.example.data.manager.HistoricalContextManager.GLOBAL_CONTEXT_BUDGET_CHARS + 200
+        )
+    }
+
+    @Test
+    fun `phase 2_5 key insight requires at least 20 explanatory words after label`() {
+        val fifteenWordExplanation = (1..15).joinToString(" ") { "word$it" }
+        val twentyWordExplanation = (1..20).joinToString(" ") { "word$it" }
+
+        assertTrue(
+            "A normal key insight with only 15 explanatory words must be shallow",
+            com.example.data.manager.PassageExplanationValidator.isShallowBullet("**Insight**: $fifteenWordExplanation")
+        )
+        assertFalse(
+            "A key insight with 20 explanatory words should satisfy the bullet-depth check",
+            com.example.data.manager.PassageExplanationValidator.isShallowBullet("**Insight**: $twentyWordExplanation")
+        )
+    }
+
 }
 
 

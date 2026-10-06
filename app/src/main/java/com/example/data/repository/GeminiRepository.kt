@@ -1019,6 +1019,7 @@ $passage
             passage = trimmedPassage,
             incompleteExplanation = initialExplanation,
             validation = validation,
+            conversationHistory = conversationHistory,
             bookTitle = bookTitle,
             chapterTitle = chapterTitle,
             authorName = authorName,
@@ -1035,6 +1036,7 @@ $passage
         passage: String,
         incompleteExplanation: String,
         validation: QualityValidationResult,
+        conversationHistory: List<ChapterMessage> = emptyList(),
         bookTitle: String? = null,
         chapterTitle: String? = null,
         authorName: String? = null,
@@ -1046,6 +1048,7 @@ $passage
                 passage = passage,
                 incompleteExplanation = incompleteExplanation,
                 validation = validation,
+                conversationHistory = conversationHistory,
                 bookTitle = bookTitle,
                 chapterTitle = chapterTitle,
                 authorName = authorName
@@ -1120,10 +1123,11 @@ $passage
         }
     }
 
-    private fun buildPassageRepairPrompt(
+    internal fun buildPassageRepairPrompt(
         passage: String,
         incompleteExplanation: String,
         validation: QualityValidationResult,
+        conversationHistory: List<ChapterMessage> = emptyList(),
         bookTitle: String? = null,
         chapterTitle: String? = null,
         authorName: String? = null
@@ -1135,12 +1139,24 @@ $passage
         ).joinToString(" | ")
 
         val repairGuidance = validation.generateRepairInstructions()
+        val rollingContext = HistoricalContextManager.buildRecentContext(conversationHistory)
 
         return """
             |The previous explanation below is structurally incomplete or lacks the required depth according to ReadMate pedagogical guidelines.
             |
             |${if (metaInfo.isNotEmpty()) "CONTEXT: $metaInfo\n" else ""}
-            |ORIGINAL BOOK PASSAGE:
+            |<RECENT_READING_CONTEXT>
+            |(Context from the latest completed passage explanations in this chapter to preserve conceptual continuity)
+            |
+            |$rollingContext
+            |</RECENT_READING_CONTEXT>
+            |
+            |CRITICAL CONTINUITY RULES:
+            |• CURRENT PASSAGE ALWAYS WINS: the current passage below is the primary source of truth.
+            |• Recent context is a continuity aid only; do not let it override, distort, or contaminate the current passage.
+            |• Preserve relevant continuity only when it genuinely applies to the author's current argument.
+            |
+            |CURRENT PASSAGE (PRIMARY SOURCE OF TRUTH):
             |\"\"\"
             |$passage
             |\"\"\"

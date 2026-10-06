@@ -252,7 +252,7 @@ object PassageExplanationValidator {
 
             when (band) {
                 PassageLengthBand.TINY -> {
-                    if (words < 15) {
+                    if (words < 10) {
                         weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
                         issues.add("Real-Life Example is too brief ($words words).")
                     }
@@ -427,9 +427,9 @@ object PassageExplanationValidator {
             .replace(Regex("^[^:\\-]+[:\\-]\\s*"), "")
             .trim()
         val contentWords = countWords(content)
-        val totalWords = countWords(bullet)
-        // A substantive bullet has explanation, not just a headline or short phrase
-        return contentWords < 14 || totalWords < 18
+        // For NORMAL/LONG passages the caller uses this to require a genuinely explained insight.
+        // Count only the explanatory content after the bold/label prefix so headings cannot inflate depth.
+        return contentWords < 20
     }
 
     fun countWords(text: String): Int {
