@@ -28,6 +28,28 @@ class PassageSanitizerTest {
     }
 
     @Test
+    fun testSanitizeSnippet_extractsMultiPageCommaRange() {
+        val raw = "[Page 1, 2]\nThis is the text across two physical pages without stray brackets."
+        val info = PassageSanitizer.sanitizeSnippet(raw)
+
+        assertEquals("This is the text across two physical pages without stray brackets.", info.cleanText)
+        assertEquals("ORIGINAL PASSAGE • PAGES 1, 2", info.pageLabel)
+        assertEquals(1, info.pageNumber)
+        assertEquals("1, 2", info.pageDisplayLabel)
+    }
+
+    @Test
+    fun testSanitizeSnippet_extractsMultiPageDashRange() {
+        val raw = "[Pages 12-13] Another continuous passage across two pages."
+        val info = PassageSanitizer.sanitizeSnippet(raw)
+
+        assertEquals("Another continuous passage across two pages.", info.cleanText)
+        assertEquals("ORIGINAL PASSAGE • PAGES 12-13", info.pageLabel)
+        assertEquals(12, info.pageNumber)
+        assertEquals("12-13", info.pageDisplayLabel)
+    }
+
+    @Test
     fun testSanitizeSnippet_extractsDistinctHeading() {
         val raw = "**The Rake**\n\nHe had a reputation for seduction and dangerous charm."
         val info = PassageSanitizer.sanitizeSnippet(raw)

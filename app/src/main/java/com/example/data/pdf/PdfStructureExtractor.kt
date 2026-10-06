@@ -2,6 +2,7 @@ package com.example.data.pdf
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.Base64
@@ -10,6 +11,7 @@ import com.example.data.manager.GeminiKeyRotationManager
 import com.example.data.model.ExtractedBookPayload
 import com.example.data.model.ExtractedChapterSection
 import com.example.data.remote.gemini.GeminiGenerateContentRequest
+import com.example.data.ocr.TextMergeUtils
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -21,6 +23,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.zip.Inflater
+import kotlin.math.roundToInt
 
 /**
  * Result of local structure extraction indicating whether chapter boundaries
@@ -290,19 +293,66 @@ Output ONLY a valid JSON object matching the schema:
     }
 
     /**
+     * Checks if extracted raw text represents meaningful, readable text rather than
+     * binary garbage, unmapped CID codes, or blank placeholders.
+     */
+    fun isMeaningfulText(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.length < 15) return false
+        if (isPlaceholderOnly(trimmed)) return false
+
+        // Printable ratio: letters, digits, punctuation, and common whitespace
+        val readableChars = trimmed.count { it.isLetterOrDigit() || it.isWhitespace() || it in ".,;:!?'\"()-–—/" }
+        val printableRatio = readableChars.toDouble() / trimmed.length.toDouble()
+        if (printableRatio < 0.75) return false
+
+        // Minimum readable word count
+        val words = trimmed.split(Regex("""\s+""")).filter { word ->
+            word.length >= 2 && word.any { it.isLetter() }
+        }
+        return words.size >= 3
+    }
+
+    /**
+     * Checks if a text string is merely a graphical/blank placeholder.
+     */
+    fun isPlaceholderOnly(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return true
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            val inner = trimmed.substring(1, trimmed.length - 1).lowercase()
+            if (inner.contains("graphical") || inner.contains("rendered") || inner.contains("blank") || inner.contains("cover") || inner.contains("placeholder")) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
      * Extracts plaintext by actual PHYSICAL PAGE INDEX (1-based, 1..min(totalPages, maxPages)).
      * Inspects only the bounded physical page range (at most the first 20 pages).
-     * Never infers page boundaries from raw file byte positions.
+     *
+     * Preferred architecture:
+     * 1. Attempts fast lightweight local text extraction from PDF object streams.
+     * 2. If meaningful text is obtained for a page, uses it.
+     * 3. If a physical page's local text is blank or unreadable (common with modern compressed PDFs,
+     *    xref streams, object streams, CID fonts), renders that specific page at modest OCR resolution
+     *    using PdfRenderer and transcribes it via Flash-Lite Multimodal Vision (VISION_EXTRACTION lane).
+     * 4. Bounded to max 5 Vision OCR calls per document and stops immediately once sufficient
+     *    front-matter evidence (TOC or >=2 chapter headings) is acquired.
+     * 5. Reuses the bounded in-memory OcrSnippetCache with purpose "PDF_STRUCTURE_FRONT_MATTER".
      */
-    fun extractPhysicalPagesText(
+    suspend fun extractPhysicalPagesText(
         pdfFile: File,
-        maxPages: Int = 20
-    ): Map<Int, String> {
+        maxPages: Int = 20,
+        enableOcrFallback: Boolean = true
+    ): Map<Int, String> = withContext(Dispatchers.IO) {
         val boundedMax = maxPages.coerceIn(1, 20)
-        if (!pdfFile.exists() || pdfFile.length() == 0L) return emptyMap()
+        if (!pdfFile.exists() || pdfFile.length() == 0L) return@withContext emptyMap()
         val result = mutableMapOf<Int, String>()
 
-        // 1. Lightweight local text extraction from PDF object streams for physical pages 0 until min(totalPages, 20)
+        // 1. Lightweight local text extraction from PDF object streams (fast-path optimization)
+        val rawObjectPages = mutableMapOf<Int, String>()
         try {
             RandomAccessFile(pdfFile, "r").use { raf ->
                 val fileLength = raf.length()
@@ -316,7 +366,7 @@ Output ONLY a valid JSON object matching the schema:
                         val physicalPageNum = pageIndex + 1 // 1-based physical page number
 
                         val pageText = extractTextForPageObject(raf, pageObjId, objOffsets)
-                        result[physicalPageNum] = pageText
+                        rawObjectPages[physicalPageNum] = pageText
                     }
                 }
             }
@@ -324,43 +374,169 @@ Output ONLY a valid JSON object matching the schema:
             Log.w(TAG, "Physical page text extraction via object streams skipped: ${e.message}")
         }
 
-        // 2. If local object stream extraction produced no pages or all blank, inspect physical pages using Android PdfRenderer
-        if (result.isEmpty() || result.values.all { it.isBlank() }) {
+        // 2. Validate meaningful text for each page
+        for (pageIndex in 0 until boundedMax) {
+            val physicalPageNum = pageIndex + 1
+            val localText = rawObjectPages[physicalPageNum]?.trim() ?: ""
+            if (isMeaningfulText(localText)) {
+                result[physicalPageNum] = localText
+            }
+        }
+
+        // 3. Fallback: If pages are blank/unreadable, use bounded PdfRenderer + Flash-Lite Vision OCR
+        if (enableOcrFallback) {
             var pfd: ParcelFileDescriptor? = null
             var renderer: PdfRenderer? = null
+            var ocrCallsCount = 0
+            val maxOcrCalls = 5 // Bounded OCR call budget
+
             try {
-                pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                renderer = PdfRenderer(pfd)
-                val total = renderer.pageCount
-                val pagesToInspect = boundedMax.coerceAtMost(total)
+                try {
+                    pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                    renderer = PdfRenderer(pfd)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "PdfRenderer initialization skipped or unavailable: ${t.message}")
+                }
+
+                val totalInDoc = renderer?.pageCount ?: boundedMax
+                val pagesToInspect = boundedMax.coerceAtMost(totalInDoc)
+
                 for (pageIdx in 0 until pagesToInspect) {
                     val physicalPageNum = pageIdx + 1
-                    var page: PdfRenderer.Page? = null
-                    var bitmap: Bitmap? = null
-                    try {
-                        page = renderer.openPage(pageIdx)
-                        // Modest resolution thumbnail render: ~300x400
-                        val modestW = (page.width / 2).coerceIn(200, 400)
-                        val modestH = (page.height / 2).coerceIn(300, 600)
-                        bitmap = Bitmap.createBitmap(modestW, modestH, Bitmap.Config.ARGB_8888)
-                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        if (!result.containsKey(physicalPageNum) || result[physicalPageNum].isNullOrBlank()) {
-                            result[physicalPageNum] = "[Physical Page $physicalPageNum Graphical/Rendered Content]"
+
+                    // Page already has verified meaningful text
+                    if (result.containsKey(physicalPageNum) && isMeaningfulText(result[physicalPageNum] ?: "")) {
+                        continue
+                    }
+
+                    // Stop unnecessary OCR once sufficient front-matter evidence has been collected
+                    if (hasSufficientFrontMatterEvidence(result)) {
+                        break
+                    }
+
+                    // Check cache first!
+                    val cacheKey = OcrSnippetCache.makePageKey(pdfFile.absolutePath, pageIdx, "PDF_STRUCTURE_FRONT_MATTER")
+                    val cachedOcr = OcrSnippetCache.get(cacheKey)
+                    if (!cachedOcr.isNullOrBlank()) {
+                        result[physicalPageNum] = cachedOcr
+                        continue
+                    }
+
+                    if (ocrCallsCount >= maxOcrCalls) {
+                        break
+                    }
+
+                    // Render one modest bitmap, OCR it, recycle bitmap, close page
+                    val base64Image = renderPageForOcr(renderer, pageIdx)
+                    if (base64Image != null) {
+                        ocrCallsCount++
+                        val ocrText = performVisionOcr(base64Image, pdfFile.name, physicalPageNum)
+                        if (!ocrText.isNullOrBlank() && !isPlaceholderOnly(ocrText)) {
+                            OcrSnippetCache.put(cacheKey, ocrText)
+                            result[physicalPageNum] = ocrText
                         }
-                    } catch (_: Throwable) {
-                    } finally {
-                        try { bitmap?.recycle() } catch (_: Throwable) {}
-                        try { page?.close() } catch (_: Throwable) {}
                     }
                 }
-            } catch (_: Throwable) {
+            } catch (t: Throwable) {
+                Log.w(TAG, "PdfRenderer OCR fallback inspection encountered exception: ${t.message}")
             } finally {
                 try { renderer?.close() } catch (_: Throwable) {}
                 try { pfd?.close() } catch (_: Throwable) {}
             }
         }
 
-        return result
+        return@withContext result
+    }
+
+    fun extractPhysicalPagesText(
+        pdfFile: File,
+        maxPages: Int = 20
+    ): Map<Int, String> = kotlinx.coroutines.runBlocking {
+        extractPhysicalPagesText(pdfFile, maxPages, enableOcrFallback = true)
+    }
+
+    private suspend fun renderPageForOcr(
+        renderer: PdfRenderer?,
+        pageIndex: Int,
+        scaleFactor: Float = 1.5f,
+        jpegQuality: Int = 85
+    ): String? = withContext(Dispatchers.IO) {
+        var page: PdfRenderer.Page? = null
+        var bitmap: Bitmap? = null
+        try {
+            if (renderer != null) {
+                page = renderer.openPage(pageIndex)
+                val renderWidth = (page.width * scaleFactor).roundToInt().coerceIn(600, 1000)
+                val renderHeight = (page.height * scaleFactor).roundToInt().coerceIn(800, 1400)
+                bitmap = Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+                val outputStream = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, outputStream)
+                return@withContext Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+            }
+            throw IllegalStateException("Renderer unavailable")
+        } catch (t: Throwable) {
+            try {
+                val dummy = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+                val outStream = ByteArrayOutputStream()
+                dummy.compress(Bitmap.CompressFormat.JPEG, jpegQuality, outStream)
+                dummy.recycle()
+                Base64.encodeToString(outStream.toByteArray(), Base64.NO_WRAP)
+            } catch (_: Throwable) {
+                null
+            }
+        } finally {
+            try {
+                if (bitmap != null && !bitmap.isRecycled) {
+                    bitmap.recycle()
+                }
+            } catch (_: Throwable) {}
+            try {
+                page?.close()
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private suspend fun performVisionOcr(
+        base64Data: String,
+        fileName: String,
+        physicalPageNum: Int
+    ): String? {
+        val request = GeminiGenerateContentRequest.forVision(
+            prompt = "Transcribe all visible English text from this document page verbatim. Preserve section headings and chapter titles.",
+            base64Data = base64Data,
+            mimeType = "image/jpeg"
+        )
+        val apiResult = rotationManager.executeFlashLiteVisionRequest(
+            request = request,
+            operationName = "Flash-Lite Page $physicalPageNum OCR for $fileName"
+        )
+        return apiResult.map { response ->
+            val raw = response.candidates?.firstOrNull()?.content?.parts?.mapNotNull { it.text }?.joinToString("\n") ?: ""
+            raw.replace("\r\n", "\n").replace("\r", "\n").trim().takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    private fun hasSufficientFrontMatterEvidence(currentPages: Map<Int, String>): Boolean {
+        var hasToc = false
+        var headingCount = 0
+        val headingRegex = Regex("""^(?:chapter\s+(\d+|[ivxlcdm]+)|part\s+(\d+|[ivxlcdm]+)|prologue|introduction)(?:\s*[:.-]\s*(.*))?$""", RegexOption.IGNORE_CASE)
+
+        for ((_, text) in currentPages) {
+            if (isPlaceholderOnly(text)) continue
+            if (text.contains("Table of Contents", ignoreCase = true) || text.contains("Contents", ignoreCase = true)) {
+                hasToc = true
+            }
+            for (line in text.lines().take(5)) {
+                if (headingRegex.containsMatchIn(line.trim())) {
+                    headingCount++
+                    break
+                }
+            }
+        }
+        return (hasToc && headingCount >= 1) || headingCount >= 2
     }
 
     /**
@@ -376,7 +552,7 @@ Output ONLY a valid JSON object matching the schema:
         for ((pageIndex, text) in pagesText.toSortedMap()) {
             builder.append("[PHYSICAL_PAGE=$pageIndex]\n")
             val clean = text.trim()
-            if (clean.isNotEmpty()) {
+            if (clean.isNotEmpty() && !isPlaceholderOnly(clean)) {
                 builder.append(clean.take(1000)).append("\n\n")
             } else {
                 builder.append("[Cover / Blank / Graphical Page]\n\n")
@@ -394,9 +570,21 @@ Output ONLY a valid JSON object matching the schema:
     fun extractFrontMatterText(
         pdfFile: File,
         maxPages: Int = 20
+    ): String = kotlinx.coroutines.runBlocking {
+        extractFrontMatterTextInternal(pdfFile, maxPages)
+    }
+
+    suspend fun extractFrontMatterTextSuspend(
+        pdfFile: File,
+        maxPages: Int = 20
+    ): String = extractFrontMatterTextInternal(pdfFile, maxPages)
+
+    private suspend fun extractFrontMatterTextInternal(
+        pdfFile: File,
+        maxPages: Int = 20
     ): String {
         if (!pdfFile.exists() || pdfFile.length() == 0L) return ""
-        val pagesText = extractPhysicalPagesText(pdfFile, maxPages.coerceIn(1, 20))
+        val pagesText = extractPhysicalPagesText(pdfFile, maxPages.coerceIn(1, 20), enableOcrFallback = true)
         return buildPageIndexedFrontMatter(pagesText)
     }
 
@@ -408,9 +596,7 @@ Output ONLY a valid JSON object matching the schema:
         pdfFile: File,
         maxPages: Int = 20,
         @Suppress("UNUSED_PARAMETER") maxBytesToRead: Int = 384 * 1024
-    ): String {
-        return extractFrontMatterText(pdfFile, maxPages)
-    }
+    ): String = extractFrontMatterText(pdfFile, maxPages)
 
     /**
      * Local Table of Contents & Chapter Heading Parser from physical pages.
@@ -426,6 +612,7 @@ Output ONLY a valid JSON object matching the schema:
 
         val tocPageNumbers = mutableListOf<Int>()
         for ((p, text) in pagesText) {
+            if (isPlaceholderOnly(text)) continue
             if (text.contains("Table of Contents", ignoreCase = true) ||
                 (text.contains("Contents", ignoreCase = true) && text.lines().count { it.contains("...") || it.contains("…") || Regex("""\d+$""").containsMatchIn(it.trim()) } >= 2)) {
                 tocPageNumbers.add(p)
@@ -441,9 +628,11 @@ Output ONLY a valid JSON object matching the schema:
         )
 
         for ((p, text) in pagesText.toSortedMap()) {
+            if (isPlaceholderOnly(text)) continue
             if (tocPage != null && p <= tocPage) continue
             val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
             for (line in lines.take(5)) {
+                if (isPlaceholderOnly(line)) continue
                 val match = headingRegex.find(line)
                 if (match != null && !line.contains("...") && !line.contains("…")) {
                     val title = line.trim()
@@ -889,36 +1078,6 @@ Output ONLY a valid JSON object matching the schema:
             if (token.isNotBlank()) textBuilder.append(token).append("\n")
         }
 
-        return textBuilder.toString().trim()
-    }
-
-    private fun extractRawBytesFallbackText(pdfFile: File, maxBytesToRead: Int): String {
-        val textBuilder = StringBuilder()
-        try {
-            RandomAccessFile(pdfFile, "r").use { raf ->
-                val readLen = maxBytesToRead.toLong().coerceAtMost(raf.length()).toInt()
-                val buffer = ByteArray(readLen)
-                raf.seek(0)
-                raf.readFully(buffer)
-                val content = String(buffer, Charsets.ISO_8859_1)
-
-                val tjRegex = Regex("""\(([^)]+)\)\s*Tj""")
-                for (match in tjRegex.findAll(content)) {
-                    val token = sanitizePdfString(match.groupValues[1])
-                    if (token.isNotBlank()) textBuilder.append(token).append(" ")
-                }
-
-                val arrayTjRegex = Regex("""\[(.*?)\]\s*TJ""")
-                for (match in arrayTjRegex.findAll(content)) {
-                    val arrayContent = match.groupValues[1]
-                    for (item in Regex("""\(([^)]+)\)""").findAll(arrayContent)) {
-                        val token = sanitizePdfString(item.groupValues[1])
-                        if (token.isNotBlank()) textBuilder.append(token)
-                    }
-                    textBuilder.append("\n")
-                }
-            }
-        } catch (_: Exception) {}
         return textBuilder.toString().trim()
     }
 

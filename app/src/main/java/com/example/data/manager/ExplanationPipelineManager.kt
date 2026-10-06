@@ -3,6 +3,7 @@ package com.example.data.manager
 import android.graphics.RectF
 import android.util.Log
 import com.example.data.local.database.entity.ChapterMessage
+import com.example.data.model.SelectedSnippet
 import com.example.data.repository.BookRepository
 import com.example.data.repository.ChapterMessageRepository
 import com.example.data.repository.ChapterRepository
@@ -301,9 +302,8 @@ class ExplanationPipelineManager(
     }
 
     /**
-     * Multi-Page Snippet:
-     * Immediately sets InProgress state ("Analyzing..."), performs Part 2 OCR extraction,
-     * merges Part 1 and Part 2, updates status to "Synthesizing...", and executes AI explanation.
+     * Multi-Page Snippet (2-part convenience overload):
+     * Converts Part 1 and Part 2 into ordered SelectedSnippet models and delegates to startMultiSnippetExplanation.
      */
     fun startMergedSnippetExplanation(
         chapterId: Long,
@@ -317,20 +317,66 @@ class ExplanationPipelineManager(
         chapterTitle: String? = null,
         authorName: String? = null,
         bookId: Long? = null,
+        chapterNumber: Int = 1,
+        part1PageIndex: Int? = null
+    ) {
+        val p1Index = part1PageIndex ?: (pageIndex - 1).coerceAtLeast(0)
+        val snippet1 = SelectedSnippet(
+            pageIndex = p1Index,
+            cropRect = cropRect,
+            extractedText = part1Text,
+            selectionOrder = 0
+        )
+        val snippet2 = SelectedSnippet(
+            pageIndex = pageIndex,
+            cropRect = cropRect,
+            viewWidth = viewWidth,
+            viewHeight = viewHeight,
+            extractedText = null,
+            selectionOrder = 1
+        )
+        startMultiSnippetExplanation(
+            chapterId = chapterId,
+            pdfFilePath = pdfFilePath,
+            snippets = listOf(snippet1, snippet2),
+            bookTitle = bookTitle,
+            chapterTitle = chapterTitle,
+            authorName = authorName,
+            bookId = bookId,
+            chapterNumber = chapterNumber
+        )
+    }
+
+    /**
+     * Multi-Page Ordered Snippets:
+     * Immediately sets InProgress state ("Analyzing..."), extracts any pending OCR fragments
+     * in the ordered collection, sorts snippets by selection order / physical page,
+     * combines them safely using TextMergeUtils.combineSnippets, updates status to "Synthesizing...",
+     * and delegates ONE combined passage to Gemini PASSAGE_ANALYSIS.
+     */
+    fun startMultiSnippetExplanation(
+        chapterId: Long,
+        pdfFilePath: String,
+        snippets: List<SelectedSnippet>,
+        bookTitle: String? = null,
+        chapterTitle: String? = null,
+        authorName: String? = null,
+        bookId: Long? = null,
         chapterNumber: Int = 1
     ) {
         val tapTime = System.currentTimeMillis()
+        if (snippets.isEmpty()) return
         if (isGenerating(chapterId)) {
             Log.d(TAG, "Chapter $chapterId already has an explanation in progress. Ignoring duplicate start.")
             return
         }
 
-        val pageNumber = pageIndex + 1
+        val pagesLabel = snippets.map { it.physicalPageNumber }.distinct().sorted().joinToString(", ")
 
         if (!geminiRepository.hasApiKey()) {
             _states.update { current ->
                 current + (chapterId to ExplanationJobState.Error(
-                    passage = "Page $pageNumber",
+                    passage = "Page $pagesLabel",
                     errorMessage = "No Gemini API key connected. Please configure your API key in Settings."
                 ))
             }
@@ -340,89 +386,74 @@ class ExplanationPipelineManager(
         // 1. Immediately set InProgress state with "Analyzing..."
         _states.update { current ->
             current + (chapterId to ExplanationJobState.InProgress(
-                passage = "Page $pageNumber",
-                pageNumber = pageNumber,
+                passage = "Page $pagesLabel",
+                pageNumber = snippets.firstOrNull()?.physicalPageNumber,
                 statusLabel = "Analyzing..."
             ))
         }
 
         val job = applicationScope.launch(ioDispatcher) {
             try {
-                val ocrResult = geminiRepository.extractTextFromPageRegion(
-                    pdfFilePath = pdfFilePath,
-                    pageIndex = pageIndex,
-                    cropRectNormalized = cropRect,
-                    viewWidth = viewWidth,
-                    viewHeight = viewHeight
-                )
+                val resolvedTexts = mutableMapOf<Int, String>() // selectionOrder -> text
+                val orderedSnippets = snippets.sortedWith(compareBy({ it.selectionOrder }, { it.pageIndex }))
 
-                ocrResult.onSuccess { part2Text ->
-                    val mergedText = TextMergeUtils.mergeMultiPagePassages(part1Text, part2Text)
-                    val formattedPassage = if (!mergedText.trim().startsWith("[Page", ignoreCase = true)) {
-                        "[Page $pageNumber]\n${mergedText.trim()}"
+                for (snippet in orderedSnippets) {
+                    if (!snippet.extractedText.isNullOrBlank()) {
+                        resolvedTexts[snippet.selectionOrder] = snippet.extractedText
                     } else {
-                        mergedText.trim()
-                    }
-
-                    // 2. Update status to "Synthesizing..."
-                    _states.update { current ->
-                        current + (chapterId to ExplanationJobState.InProgress(
-                            passage = formattedPassage,
-                            pageNumber = pageNumber,
-                            statusLabel = "Synthesizing..."
-                        ))
-                    }
-
-                    executeGeminiExplanation(
-                        chapterId = chapterId,
-                        trimmedPassage = formattedPassage,
-                        bookTitle = bookTitle,
-                        chapterTitle = chapterTitle,
-                        authorName = authorName,
-                        bookId = bookId,
-                        chapterNumber = chapterNumber,
-                        tapTime = tapTime
-                    )
-                }.onFailure { error ->
-                    _states.update { current ->
-                        current + (chapterId to ExplanationJobState.Error(
-                            passage = "Page $pageNumber",
-                            errorMessage = error.message ?: "Failed to extract text for Part 2.",
-                            pageNumber = pageNumber,
-                            retryAction = {
-                                startMergedSnippetExplanation(
-                                    chapterId = chapterId,
-                                    pdfFilePath = pdfFilePath,
-                                    pageIndex = pageIndex,
-                                    part1Text = part1Text,
-                                    cropRect = cropRect,
-                                    viewWidth = viewWidth,
-                                    viewHeight = viewHeight,
-                                    bookTitle = bookTitle,
-                                    chapterTitle = chapterTitle,
-                                    authorName = authorName,
-                                    bookId = bookId,
-                                    chapterNumber = chapterNumber
-                                )
-                            }
-                        ))
+                        val ocrResult = geminiRepository.extractTextFromPageRegion(
+                            pdfFilePath = pdfFilePath,
+                            pageIndex = snippet.pageIndex,
+                            cropRectNormalized = snippet.cropRect,
+                            viewWidth = snippet.viewWidth,
+                            viewHeight = snippet.viewHeight
+                        )
+                        if (ocrResult.isSuccess) {
+                            resolvedTexts[snippet.selectionOrder] = ocrResult.getOrThrow()
+                        } else {
+                            throw Exception(ocrResult.exceptionOrNull()?.message ?: "Failed to extract text for page ${snippet.physicalPageNumber}")
+                        }
                     }
                 }
+
+                val orderedTextList = orderedSnippets.mapNotNull { resolvedTexts[it.selectionOrder] }
+                val mergedText = TextMergeUtils.combineSnippets(orderedTextList)
+                val formattedPassage = if (!mergedText.trim().startsWith("[Page", ignoreCase = true)) {
+                    "[Page $pagesLabel]\n${mergedText.trim()}"
+                } else {
+                    mergedText.trim()
+                }
+
+                // 2. Update status to "Synthesizing..."
+                _states.update { current ->
+                    current + (chapterId to ExplanationJobState.InProgress(
+                        passage = formattedPassage,
+                        pageNumber = snippets.firstOrNull()?.physicalPageNumber,
+                        statusLabel = "Synthesizing..."
+                    ))
+                }
+
+                executeGeminiExplanation(
+                    chapterId = chapterId,
+                    trimmedPassage = formattedPassage,
+                    bookTitle = bookTitle,
+                    chapterTitle = chapterTitle,
+                    authorName = authorName,
+                    bookId = bookId,
+                    chapterNumber = chapterNumber,
+                    tapTime = tapTime
+                )
             } catch (t: Throwable) {
                 _states.update { current ->
                     current + (chapterId to ExplanationJobState.Error(
-                        passage = "Page $pageNumber",
-                        errorMessage = t.message ?: "Unexpected error during multi-page snippet processing.",
-                        pageNumber = pageNumber,
+                        passage = "Page $pagesLabel",
+                        errorMessage = t.message ?: "Failed during multi-page snippet extraction.",
+                        pageNumber = snippets.firstOrNull()?.physicalPageNumber,
                         retryAction = {
-                            startMergedSnippetExplanation(
+                            startMultiSnippetExplanation(
                                 chapterId = chapterId,
                                 pdfFilePath = pdfFilePath,
-                                pageIndex = pageIndex,
-                                part1Text = part1Text,
-                                cropRect = cropRect,
-                                viewWidth = viewWidth,
-                                viewHeight = viewHeight,
+                                snippets = snippets,
                                 bookTitle = bookTitle,
                                 chapterTitle = chapterTitle,
                                 authorName = authorName,

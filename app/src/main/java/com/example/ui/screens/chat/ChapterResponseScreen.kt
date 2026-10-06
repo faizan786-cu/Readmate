@@ -553,10 +553,11 @@ private fun EditorialDocumentBody(
                 )
             }
 
-            if (entry.pageNumber != null) {
+            val displayPage = entry.pageDisplayLabel ?: entry.pageNumber?.toString()
+            if (!displayPage.isNullOrBlank()) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "p. ${entry.pageNumber}",
+                    text = if (displayPage.contains(",") || displayPage.contains("-")) "pp. $displayPage" else "p. $displayPage",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFFA1A1AA)
@@ -754,7 +755,10 @@ private fun EditorialDocumentBody(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    val pageSuffix = if (entry.pageNumber != null) " • P. ${entry.pageNumber}" else ""
+                    val displayPage = entry.pageDisplayLabel ?: entry.pageNumber?.toString()
+                    val pageSuffix = if (!displayPage.isNullOrBlank()) {
+                        if (displayPage.contains(",") || displayPage.contains("-")) " • PP. $displayPage" else " • P. $displayPage"
+                    } else ""
                     Text(
                         text = "ORIGINAL PASSAGE$pageSuffix",
                         fontSize = 11.sp,

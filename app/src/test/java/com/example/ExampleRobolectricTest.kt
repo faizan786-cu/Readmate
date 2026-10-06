@@ -1719,20 +1719,31 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         val passage = "Financial success is not a hard science. It's a soft skill, where how you behave is more important than what you know. Two people with the same knowledge can have totally different financial outcomes based on their emotions and self-control."
         val properResponse = """
             ## 🧠 Asaan Samjh
-            Author yahan ek bohot ahem haqeeqat bayan kar raha hai ke paison ke mamlay mein kamyabi sirf is baat par depend nahi karti ke aap ke paas kitni formal education ya degree hai. Asal cheez ye hai ke aap apne jazbaat, lalach, aur kharche ke waqt apne dimagh par kitna control rakhte hain.
+            Author yahan ek bohot ahem haqeeqat bayan kar raha hai ke paison ke mamlay mein kamyabi sirf is baat par depend nahi karti ke aap ke paas kitni formal education ya degree hai. Asal cheez ye hai ke aap apne jazbaat, lalach, aur kharche ke waqt apne dimagh par kitna control rakhte hain aur mushkil halaat mein kaisa rawaiyya apnate hain.
 
-            Yani do afrad jin ke paas bilkul barabar maloomat ho, phir bhi unka financial mustaqbil bilkul mukhtalif ho sakta hai. Ek shakhs sabar ke saath invest karta hai aur doosra shakhs jazbaat mein aakar jaldbazi mein apna nuqsan kar baithta hai. Is liye behavior ilm se zyada ahem hai.
+            Yani do afrad jin ke paas bilkul barabar maloomat ho, phir bhi unka financial mustaqbil bilkul mukhtalif ho sakta hai kyunke unke faislay unki zehniyat par munhasir hotay hain. Ek shakhs sabar ke saath invest karta hai aur doosra shakhs jazbaat mein aakar jaldbazi mein apna nuqsan kar baithta hai. Is liye behavior ilm se zyada ahem aur taqatwar hai.
+
+            Mazeed ye ke financial market mein sab se mushkil kaam apne andar ke khauf aur lalach ko qabu mein rakhna hota hai jab har taraf afra-tafri machi ho. Jab log panic mein bech rahe hotay hain to sirf wahi shakhs munafa kamata hai jo mustahkam rehta hai aur market ke utar-charhao ko thanday dimagh se dekhta hai.
+
+            Aakhir mein ye baat samajhna zaroori hai ke technical formulas aur spreadsheets seekhna aasan hai lekin apni rozmarrah ki khwahishat par qabu pana intehayi dushwar kaam hai. Jo shakhs apne nafs aur rawaiyye par qabu pa leta hai, woh kam aamdani ke bawajood lambay arsay mein azeem daulat jama kar leta hai.
 
             ## 💡 Main Lesson
-            Maliyat mein kamyabi ka taaluq aapki technical intelligence se zyada aapke sabar, bardasht aur discipline se hota hai.
+            Maliyat mein kamyabi ka taaluq aapki formal degree ya technical intelligence se zyada aapke sabar, bardasht aur mustaqil mizaji se hota hai jo rozana ke faislon mein nazar aati hai. Jab aap mushkil halaat mein apne lalach aur darr par qabu paana seekh lete hain to aapka maashi mustaqbil khud-ba-khud mehfooz aur roshan ho jata hai.
+
+            Agar aap apne jazbaat par qabu paana nahi seekhte to duniya ka baray se bara ilm ya ameer tareen background bhi aapko nuqsan aur maashi tabahi se nahi bacha sakta kyunke ghalat faislay hamesha jazbaat ki andhi ro mein hotay hain. Asal kamyabi zehni zabt aur mustaqil mizaji se aati hai.
 
             ## 🔑 Key Points
-            • **Behavior Banam Ilm**: Sirf market ka knowledge hona kafi nahi, balki us knowledge par jazbaat ke baghair amal karna zaroori hai.
-            • **Self-Control Ki Ahmiyat**: Lalach aur khauf do aisi cheezein hain jo aqalmand tareen insan se bhi ghalat financial faislay karwa sakti hain.
-            • **Musalsal Sabar**: Dault banne ka process aahista aahista chalta hai, is mein jaldbazi hamesha nuqsan deh sabit hoti hai.
+            • **Behavior Banam Ilm**: Sirf market ka theoretical knowledge hona kafi nahi balki us knowledge par jazbaat ke baghair sakhti se amal karna aur sabar dikhana zaroori hai.
+            • **Self-Control Ki Ahmiyat**: Lalach aur khauf do aisi cheezein hain jo aqalmand tareen insan se bhi ghalat tareen financial faislay karwa sakti hain agar woh hosh kho baithay.
+            • **Musalsal Sabar**: Daulat banne ka process aahista aahista saalon par muheet hota hai, is mein jaldbazi aur raaton raat ameer banne ki koshish hamesha nuqsan deh sabit hoti hai.
+            • **Nafs Par Qabu**: Apne rozana ke ikhrajat aur show-off ki aadat ko control karna kisi bhi technical stock analysis se kahin zyada faida mand aur zaroori amal hai.
 
             ## 🌎 Real-Life Example
-            Do dost hain jo ek hi office mein barabar salary lete hain. Ek dost har mahine salary aane par display ke liye mehenge gadgets khareedta hai, jabke doosra dost pehle apni emergency savings alag karta hai. Paanch saal baad pehla dost qarz mein phans jata hai jabke doosra dost financially azaad mehsoos karta hai.
+            Do dost hain jin ka naam Bilal aur Usman hai, jo ek hi software company mein bilkul barabar tankhwah par kaam shuru karte hain. Bilal har mahine salary aate hi naye model ke mehenge gadgets khareed leta hai aur display ke liye doston par fazool kharchi karta hai, jabke Usman har maah pehle apni emergency savings alag karta hai aur index fund mein baqaidgi se invest karta hai.
+
+            Paanch saal baad jab mulk mein achanak maashi bohran aata hai aur company kuch logon ko lay-off karti hai, to Bilal par qarz ka shadeed dabao aa jata hai aur woh panic mein apne zati asason ko khori ke bhao bechne par majboor ho jata hai. Doosri taraf Usman ke paas mutadid maahon ka emergency cash aur behtareen investments hoti hain jo usay mukammal itminan aur azaadi bakhshti hain.
+
+            Ye misaal saaf zahir karti hai ke dono ke paas barabar ki education aur tankhwah thi, lekin Usman ke sabar aamiz rawaiyye ne usay kamyab banaya jabke Bilal ki jazbati kharchon ki aadat ne usay qarz ke daldal mein dhakail diya.
         """.trimIndent()
 
         val validation = com.example.data.manager.PassageExplanationValidator.validate(passage, properResponse)
@@ -1791,18 +1802,29 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
             ## 🧠 Asaan Samjh
             Author yahan compounding ke sab se ahem usool ki taraf ishara kar raha hai. Jab koi sarmayakari ya aadat aahista aahista barh rahi ho, to darmiyan mein be-waja mudakhilat karna uske barhay hue fawaid ko khatam kar deta hai.
 
-            Haqeeqat ye hai ke compounding ka asal asar aakhri saalon mein samne aata hai. Agar aap beech mein jazbaat mein aakar paise nikal lein ge, to exponential growth ka faida haasil nahi ho sake ga.
+            Haqeeqat ye hai ke compounding ka asal asar aakhri saalon mein samne aata hai. Agar aap beech mein jazbaat mein aakar paise nikal lein ge, to exponential growth ka faida haasil nahi ho sake ga aur saalon ki mehnat zaya ho sakti hai.
+
+            Is process ko jari rakhne ke liye intehayi bardasht aur sabar ki zaroorat hoti hai. Jab market mein utar-charhao ho to ghabra kar bechne ke bajaye apne plan par qayam rehna hi asal aqalmandi hai.
+
+            Natija ye nikalta hai ke agar aap compounding ko baghair kisi rukawat ke chalne dein to aakhir mein nataij aapke guman se bhi kahin zyada behtareen aur hairat angez sabit hotay hain.
 
             ## 💡 Main Lesson
-            Compounding ke fawaid haasil karne ke liye sab se zaroori cheez sabar hai taake process be-waja na ruke.
+            Compounding ke fawaid haasil karne ke liye sab se zaroori cheez sabar aur mustaqil mizaji hai taake taraqqi ka process be-waja na rukay.
+
+            Har bar jab aap process ko beech mein roktay hain, aap apni taraqqi ki raftaar ko dobara sifar par le aatay hain jo ke bohot bara nuqsan hai.
 
             ## 🔑 Key Points
-            • **Be-Waja Mudakhilat Se Bachna**: Sab se mushkil kaam kuch na karna hota hai jab market utar charhao ka shikar ho.
-            • **Aakhri Marhalay Ka Faida**: Sab se bari taraqqi shuru mein nahi balki lambay arsay baad zahir hoti hai.
-            • **Discipline Ki Zaroorat**: Compounding ko chalta rakhna sakht zabt aur mustaqil mizaji ka talabgar hai.
+            • **Be-Waja Mudakhilat Se Bachna**: Sab se mushkil kaam kuch na karna hota hai jab market utar charhao ka shikar ho, lekin yahi sab se ziyada mufeed hai.
+            • **Aakhri Marhalay Ka Faida**: Sab se bari taraqqi shuru mein nahi balki lambay arsay baad aakhri chand saalon mein zahir hoti hai.
+            • **Discipline Ki Zaroorat**: Compounding ko chalta rakhna sakht zabt aur mustaqil mizaji ka talabgar hai taake jazbaati faislon se bacha ja sakay.
+            • **Waqt Ka Kirdar**: Asal jadoo raqam ki miqdar mein nahi balki us waqt mein hai jo aap sarmaye ko barhne ke liye dete hain.
 
             ## 🌎 Real-Life Example
             Ek shakhs jo 20 saal ke liye investment shuru karta hai lekin har do saal baad darr kar account khali kar deta hai, woh kabhi compounding ki dault nahi dekh pata ba-nisbat us ke jo 20 saal tak chup chaap raqam parhi rehne deta hai.
+
+            Pehla shakhs bar bar naye sire se shuru karta hai aur transaction fees aur market timing ke chakkar mein nuqsan uthata hai, jabke doosra shakhs aahista aahista exponential returns hasil karta hai.
+
+            Ye misaal wazeh karti hai ke compounding ka sab se bara dushman hamari apni be-sabri aur be-waja mudakhilat hoti hai jo achay bhale process ko tabah kar deti hai.
         """.trimIndent()
 
         var streamCallCount = 0
@@ -2086,18 +2108,29 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
             ## 🧠 Asaan Samjh
             Author yahan sarmayakari aur bachat ka sab se ahem usool bayan kar raha hai ke aam tor par log pehle tamam kharchay karte hain aur agar aakhir mein kuch bacha to save karte hain, jo ke ghair-moassir tareeqa hai.
 
-            Sahi hikmat-e-amli ye hai ke salary ya aamdani aate hi pehle tay shuda raqam bachat ke account mein muntaqil ki jaye, aur baqi bachi hui raqam se mahinay ke ikhrajat chalaye jayen. Is se mustaqbil mehfooz hota hai.
+            Sahi hikmat-e-amli ye hai ke salary ya aamdani aate hi pehle tay shuda raqam bachat ke account mein muntaqil ki jaye, aur baqi bachi hui raqam se mahinay ke ikhrajat chalaye jayen. Is se mustaqbil mehfooz hota hai aur insan be-fuzool ikhrajat se bacha rehta hai.
+
+            Jab aap pehle kharch karte hain to zehni tor par aap ke paas hamesha paisa kam parh jata hai kyunke insani khwahishat ki koi intiha nahi hoti. Har naya kharcha zaroori lagne lagta hai aur bachat ka khawab hamesha adhoora reh jata hai.
+
+            Is ke bar-aks jab aap bachat ko pehli tarjeeh banate hain to aap apne aap ko ek qanoon ka paband banate hain. Bachi hui raqam mein guzar basar karna shuru mein mushkil lagta hai lekin yehi aadat lambay arsay mein azeem maashi azaadi ka sabab banti hai.
 
             ## 💡 Main Lesson
-            Apne mustaqbil ko hamesha pehli tarjeeh banayein aur har maah apni bachat ko zaroori ikhrajat se pehle alag karna lazmi banayein taake mali azaadi haasil ho sakay.
+            Apne mustaqbil ko hamesha pehli tarjeeh banayein aur har maah apni bachat ko zaroori ikhrajat se pehle alag karna lazmi banayein taake mali azaadi haasil ho sakay. Jab aap pehle bachat karte hain to aap apne maashi nizam ko mehfooz banate hain aur anay walay bohran ke liye tayyar rehte hain.
+
+            Agar aap apne mustaqbil ki parwah nahi karenge to koi doosra aapke maashi mustaqbil ko sanwaar nahi sake ga, is liye bachat hamesha aamdani ka pehla hissa honi chahiye. Yahi asool ameer aur ghareeb ke darmiyan asal farq peda karta hai aur mustaqil itminan bakhshta hai.
 
             ## 🔑 Key Points
-            • **Pehle Apne Aap Ko Pay Karein**: Aamdani aate hi pehla hissa apne mustaqbil ke naam karein.
-            • **Ikhrajat Par Control**: Jab bachi hui raqam mehdood hogi to be-fuzool kharchay khud bakhud ruk jayenge.
-            • **Dolat Ki Bunyad**: Ameer log bachat pehle karte hain jabke ghareeb ikhrajat ke baad bachat ka sochte hain.
+            • **Pehle Apne Aap Ko Pay Karein**: Aamdani aate hi pehla hissa apne mustaqbil ke naam karein taake lambay arsay mein azaad zindagi guzar sakein.
+            • **Ikhrajat Par Khud-Ba-Khud Control**: Jab kharch karne ke liye bachi hui raqam mehdood hogi to be-fuzool kharchay khud bakhud ruk jayenge aur bachat mehfooz rahegi.
+            • **Daulat Ki Bunyadi Zehniyat**: Ameer zehniyat ke log bachat aur investment pehle karte hain jabke ghareeb ikhrajat ke baad bachat ka sochte hain.
+            • **Ghair-Zaroori Show-off Se Bachna**: Log aksar doosron ko mutasir karne ke liye kharch karte hain, bachat ko tarjeeh dena is nafsiyati bimari ka behtareen ilaaj hai.
 
             ## 🌎 Real-Life Example
             Misaal ke tor par do mulazmeen hain jo barabar tankhwah lete hain. Ek shakhs 50 hazar aane par pehle 10 hazar saving account mein daalta hai aur baqi 40 hazar se guzar karta hai. Doosra shakhs sara paisa kharch karne ke baad aakhir mein zero bacha pata hai aur mustaqil pareshan rehta hai.
+
+            Pehla shakhs paanch saal baad ek behtareen emergency fund aur mutual funds ka maalik hota hai jis se us ka mustaqbil mehfooz rehta hai. Jabke doosra shakhs har maheenay salary ka muntazir rehta hai aur kisi bhi ghair-mutawaqqo kharche par qarz lene par majboor ho jata hai.
+
+            Ye waqia saaf sabit karta hai ke dono ki amdani barabar thi lekin sirf tarjeeh badalne se dono ki maashi halat mein zameen aasman ka farq peda ho gaya.
         """.trimIndent()
 
         val initialValidation = com.example.data.manager.PassageExplanationValidator.validate(passage, invalidInitialDraft)
@@ -3471,6 +3504,779 @@ Agar kisi shaks ne bachpan mein job loss ya mushkil waqt dekha ho, toh woh hames
         val pageCountEmpty = com.example.data.pdf.PdfStorageManager.getPdfPageCount(emptyFile)
         assertEquals("Empty file must return 0 pages without exception", 0, pageCountEmpty)
         emptyFile.delete()
+    }
+
+    @Test
+    fun `phase 5 - if local page-object text returns blank renderer OCR fallback supplies actual text for that physical page`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_ocr_fallback", "Key 1")
+        com.example.data.pdf.OcrSnippetCache.clear()
+
+        var visionCalled = false
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                visionCalled = true
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "Verbatim OCR text from physical page"))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        // Synthetic PDF with no text stream (local object parser decodes nothing)
+        val dummyPdf = java.io.File(context.cacheDir, "blank_stream_book.pdf")
+        dummyPdf.writeText(buildString {
+            append("%PDF-1.4\n")
+            append("1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n")
+            append("2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n")
+            append("3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\n")
+            append("trailer<</Size 4/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+        })
+
+        val pagesMap = extractor.extractPhysicalPagesText(dummyPdf, maxPages = 1, enableOcrFallback = true)
+        assertTrue("Vision OCR fallback must have been invoked", visionCalled)
+        assertTrue("Physical page 1 must have an entry", pagesMap.containsKey(1))
+        val page1Text = pagesMap[1] ?: ""
+        assertTrue("Page 1 must contain actual OCR text, not generic placeholder: was '$page1Text'", page1Text.contains("Verbatim OCR text from physical page"))
+        assertFalse("Page 1 must not be a placeholder", extractor.isPlaceholderOnly(page1Text))
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - OCR fallback text is included beneath the correct PHYSICAL_PAGE marker`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_ocr_marker", "Key 1")
+        com.example.data.pdf.OcrSnippetCache.clear()
+
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "Title Page: The Architecture of Art"))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val dummyPdf = java.io.File(context.cacheDir, "marker_test_book.pdf")
+        dummyPdf.writeText("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+
+        val frontMatter = extractor.extractFrontMatterText(dummyPdf, maxPages = 1)
+        assertTrue("Front-matter must include [PHYSICAL_PAGE=1]", frontMatter.contains("[PHYSICAL_PAGE=1]"))
+        assertTrue("OCR text must appear beneath the physical page marker: was '$frontMatter'", frontMatter.contains("The Architecture of Art"))
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - synthetic PDF whose text cannot be decoded by lightweight parser can still produce TOC chapter text through fallback`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_ocr_toc", "Key 1")
+        com.example.data.pdf.OcrSnippetCache.clear()
+
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                val ocrResponse = "Table of Contents\nChapter 1: Foundations ... 5\nChapter 2: Frameworks ... 25"
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = ocrResponse))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val dummyPdf = java.io.File(context.cacheDir, "toc_fallback_book.pdf")
+        dummyPdf.writeText("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+
+        val pagesMap = extractor.extractPhysicalPagesText(dummyPdf, maxPages = 1, enableOcrFallback = true)
+        val localResult = extractor.extractLocalFrontMatterStructure(pagesMap, totalPages = 50, fallbackTitle = "Architecture")
+
+        // Local structure finds the TOC parsed from the OCR fallback text
+        assertTrue("TOC sections must be parsed from OCR fallback text", localResult.sections.isNotEmpty())
+        assertEquals("First chapter title must be Foundations", "Chapter 1: Foundations", localResult.sections[0].title)
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - placeholder-only rendered pages cannot make isPhysicallyTrustworthy true`() {
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(
+            com.example.data.local.security.AndroidKeystoreApiKeyStorage(ApplicationProvider.getApplicationContext())
+        )
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val placeholderPages = mapOf(
+            1 to "[Physical Page 1 Graphical/Rendered Content]",
+            2 to "[Physical Page 2 Graphical Content]",
+            3 to "[Cover / Blank / Graphical Page]"
+        )
+
+        val localResult = extractor.extractLocalFrontMatterStructure(placeholderPages, totalPages = 50, fallbackTitle = "Placeholder Book")
+        assertFalse("Placeholder-only pages must NEVER establish isPhysicallyTrustworthy = true", localResult.isPhysicallyTrustworthy)
+        assertTrue("No valid sections should be extracted from placeholder-only pages", localResult.sections.isEmpty())
+    }
+
+    @Test
+    fun `phase 5 - identical PDF page purpose fallback OCR reuses existing cache and does not create second API request`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_ocr_cache_reuse", "Key 1")
+        com.example.data.pdf.OcrSnippetCache.clear()
+
+        var apiCalls = 0
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                apiCalls++
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "Cached OCR text $apiCalls"))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val dummyPdf = java.io.File(context.cacheDir, "cache_reuse_book.pdf")
+        dummyPdf.writeText("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+
+        // First call: API called once
+        val pages1 = extractor.extractPhysicalPagesText(dummyPdf, maxPages = 1, enableOcrFallback = true)
+        assertEquals("API must be called once", 1, apiCalls)
+        val text1 = pages1[1]
+
+        // Second call on identical PDF, page, and purpose: Cache hit!
+        val pages2 = extractor.extractPhysicalPagesText(dummyPdf, maxPages = 1, enableOcrFallback = true)
+        assertEquals("API call count must remain 1 after second call (reused cache)", 1, apiCalls)
+        assertEquals("Text must be identical", text1, pages2[1])
+
+        dummyPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - meaningful-text validation rejects gibberish and short noise and triggers OCR fallback`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_meaningful", "Key 1")
+        com.example.data.pdf.OcrSnippetCache.clear()
+
+        // 1. Direct unit verification of isMeaningfulText
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        assertFalse("Blank string must be rejected", extractor.isMeaningfulText(""))
+        assertFalse("Short string (< 15 chars) must be rejected", extractor.isMeaningfulText("Hi there"))
+        assertFalse("Placeholder text must be rejected", extractor.isMeaningfulText("[Physical Page 1 Graphical/Rendered Content]"))
+        assertFalse("Binary/corrupted unprintable stream must be rejected", extractor.isMeaningfulText("\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd"))
+        assertTrue("Substantive sentence must be accepted", extractor.isMeaningfulText("Chapter 1: The Foundations of Software Engineering"))
+
+        // 2. Integration verification: PDF with gibberish stream fails local check and triggers OCR fallback
+        var ocrCalled = false
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                ocrCalled = true
+                val response = com.example.data.remote.gemini.GeminiGenerateContentResponse(
+                    candidates = listOf(
+                        com.example.data.remote.gemini.GeminiCandidate(
+                            content = com.example.data.remote.gemini.GeminiContent(
+                                parts = listOf(com.example.data.remote.gemini.GeminiPart(text = "Recovered via OCR: Chapter 1 Foundations"))
+                            )
+                        )
+                    )
+                )
+                return retrofit2.Response.success(response)
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val testRotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val testExtractor = com.example.data.pdf.PdfStructureExtractor(testRotationManager)
+
+        val gibberishPdf = java.io.File(context.cacheDir, "gibberish_stream.pdf")
+        gibberishPdf.writeText(buildString {
+            append("%PDF-1.4\n")
+            append("1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n")
+            append("2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n")
+            append("3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R>>endobj\n")
+            append("4 0 obj<</Length 18>>stream\n")
+            append("BT /F1 12 Tf (\u0000\u0001\u0002) Tj ET\n")
+            append("endstream\nendobj\n")
+            append("trailer<</Size 5/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+        })
+
+        val pages = testExtractor.extractPhysicalPagesText(gibberishPdf, maxPages = 1, enableOcrFallback = true)
+        assertTrue("OCR must be triggered when local stream contains unreadable gibberish", ocrCalled)
+        assertEquals("Page 1 must contain the OCR recovered text", "Recovered via OCR: Chapter 1 Foundations", pages[1])
+
+        gibberishPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 5 - fast path - if local text is meaningful OCR is skipped for that page`(): Unit = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        storage.clearAllApiKeys()
+        storage.addApiKey("test_key_fast_path", "Key 1")
+        com.example.data.pdf.OcrSnippetCache.clear()
+
+        var ocrCalled = false
+        val fakeApiService = object : com.example.data.remote.gemini.GeminiApiService {
+            override suspend fun generateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest): retrofit2.Response<com.example.data.remote.gemini.GeminiGenerateContentResponse> {
+                ocrCalled = true
+                return retrofit2.Response.success(com.example.data.remote.gemini.GeminiGenerateContentResponse())
+            }
+            override suspend fun streamGenerateContent(model: String, apiKey: String, request: com.example.data.remote.gemini.GeminiGenerateContentRequest) = throw UnsupportedOperationException()
+        }
+
+        val rotationManager = com.example.data.manager.GeminiKeyRotationManager(storage, fakeApiService)
+        val extractor = com.example.data.pdf.PdfStructureExtractor(rotationManager)
+
+        val meaningfulPdf = java.io.File(context.cacheDir, "meaningful_local_stream.pdf")
+        val streamContent = "BT /F1 12 Tf (Chapter 1: Architecture and Design Patterns) Tj ET"
+        meaningfulPdf.writeText(buildString {
+            append("%PDF-1.4\n")
+            append("1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n")
+            append("2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n")
+            append("3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R>>endobj\n")
+            append("4 0 obj<</Length ${streamContent.length}>>stream\n")
+            append("$streamContent\n")
+            append("endstream\nendobj\n")
+            append("trailer<</Size 5/Root 1 0 R>>\nstartxref\n9999\n%%EOF\n")
+        })
+
+        val pages = extractor.extractPhysicalPagesText(meaningfulPdf, maxPages = 1, enableOcrFallback = true)
+        assertFalse("OCR must NOT be called when local text is meaningful (fast path)", ocrCalled)
+        assertTrue("Page 1 must contain local extracted text", pages.containsKey(1))
+        assertTrue("Extracted text must match local content", pages[1]?.contains("Chapter 1: Architecture and Design Patterns") == true)
+
+        meaningfulPdf.delete()
+        Unit
+    }
+
+    @Test
+    fun `phase 2_5 - buildPassageUserPrompt includes previous 5 contexts with sections preserved and multi-page directive`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        val geminiRepo = com.example.data.repository.GeminiRepository(storage)
+
+        val history = (1..6).map { i ->
+            com.example.data.local.database.entity.ChapterMessage(
+                id = i.toLong(),
+                chapterId = 1L,
+                originalText = "Original English passage number $i.",
+                aiResponse = """
+                    ## 🧠 Asaan Samjh
+                    Understanding content for passage $i in simple Roman Urdu.
+                    
+                    ## 💡 Main Lesson
+                    Main lesson for passage $i.
+                    
+                    ## 🔑 Key Points
+                    • **Point $i**: Insight for passage $i.
+                    
+                    ## 🌎 Real-Life Example
+                    Example scenario for passage $i.
+                """.trimIndent()
+            )
+        }
+
+        val multiPagePassage = "[Page 3, 4]\nPart 1 of the passage on page 3. Part 2 of the passage continuing on page 4."
+        val prompt = geminiRepo.buildPassageUserPrompt(
+            passage = multiPagePassage,
+            conversationHistory = history,
+            bookTitle = "The Psychology of Money",
+            chapterTitle = "Never Enough",
+            authorName = "Morgan Housel"
+        )
+
+        // Must include exactly the latest 5 contexts (Passage #2 through #6, dropping Passage #1)
+        assertFalse("Passage #1 must be dropped to keep strictly the latest 5 contexts", prompt.contains("Original English passage number 1."))
+        assertTrue("Passage #2 must be included in rolling context", prompt.contains("Original English passage number 2."))
+        assertTrue("Passage #6 must be included in rolling context", prompt.contains("Original English passage number 6."))
+
+        // Sections must be preserved in rolling context
+        assertTrue("Understanding section must be present in rolling context", prompt.contains("Understanding: Understanding content for passage"))
+        assertTrue("Core Takeaway section must be present in rolling context", prompt.contains("Core Takeaway: Main lesson for passage"))
+        assertTrue("Key Insights section must be present in rolling context", prompt.contains("Key Insights: • **Point"))
+        assertTrue("Example section must be present in rolling context", prompt.contains("Example: Example scenario for passage"))
+
+        // Multi-page directive must be explicitly injected
+        assertTrue("Multi-page directive must be injected when passage indicates multiple pages", prompt.contains("MULTI-PAGE SELECTION DIRECTIVE"))
+        assertTrue("Directive must instruct to explain both parts together", prompt.contains("synthesize and explain BOTH selected page fragments together"))
+    }
+
+    @Test
+    fun `phase 2_5 - multi-page snippet combination safely preserves distinct physical pages`() {
+        val snippet1 = com.example.data.model.SelectedSnippet(
+            pageIndex = 2, // Physical Page 3
+            cropRect = android.graphics.RectF(0f, 0f, 1f, 1f),
+            extractedText = "The highest form of wealth is the ability to wake up every morning and say,",
+            selectionOrder = 0
+        )
+        val snippet2 = com.example.data.model.SelectedSnippet(
+            pageIndex = 3, // Physical Page 4
+            cropRect = android.graphics.RectF(0f, 0f, 1f, 1f),
+            extractedText = "\"I can do whatever I want today.\"",
+            selectionOrder = 1
+        )
+
+        val snippets = listOf(snippet1, snippet2)
+        val pagesLabel = snippets.map { it.physicalPageNumber }.distinct().sorted().joinToString(", ")
+        assertEquals("3, 4", pagesLabel)
+
+        val mergedText = com.example.data.ocr.TextMergeUtils.combineSnippets(listOf(snippet1.extractedText!!, snippet2.extractedText!!))
+        val formattedPassage = "[Page $pagesLabel]\n$mergedText"
+
+        assertTrue("Formatted passage must contain [Page 3, 4]", formattedPassage.startsWith("[Page 3, 4]"))
+        assertTrue("Merged text must join both fragments seamlessly", formattedPassage.contains("The highest form of wealth"))
+        assertTrue("Merged text must contain second fragment", formattedPassage.contains("\"I can do whatever I want today.\""))
+
+        // Verify PassageSanitizer handles this combined format cleanly
+        val sanitized = com.example.ui.components.chat.PassageSanitizer.sanitizeSnippet(formattedPassage)
+        assertEquals(3, sanitized.pageNumber)
+        assertEquals("3, 4", sanitized.pageDisplayLabel)
+        assertEquals("ORIGINAL PASSAGE • PAGES 3, 4", sanitized.pageLabel)
+        assertFalse("Clean text must not contain stray bracket or page remnants", sanitized.cleanText.startsWith("]"))
+        assertFalse("Clean text must not contain stray comma", sanitized.cleanText.startsWith(","))
+        assertTrue("Clean text contains complete merged passage", sanitized.cleanText.startsWith("The highest form of wealth"))
+    }
+
+    // ==================================================
+    // PHASE 2.5 FINAL CORRECTION TESTS (1 to 12)
+    // ==================================================
+
+    @Test
+    fun `phase 2_5 - test 1 - 150 to 200 word total explanation for a normal passage FAILS`() {
+        val normalPassage = "The psychology of money is largely about human behavior, ego, fear, and long-term discipline. People who grow up in poverty view risk very differently from those who grew up in wealth."
+        val short160WordsResponse = """
+            ## 🧠 Asaan Samjh
+            Author yahan batata hai ke paisa sirf hisab kitab nahi hai. Yeh insani rawaiye aur jazbaat par chalta hai. Har shakhs ka tajurba mukhtalif hota hai jis se uski soch banti hai.
+
+            Ameer aur ghareeb ka zehni farq unke faislon mein saaf nazar aata hai aur yehi asal haqeeqat hai.
+
+            ## 💡 Main Lesson
+            Paison ki samajh jazbaat par qabu paane ka naam hai taake sahi waqt par behtar faislay kiye ja sakein.
+
+            ## 🔑 Key Points
+            • **Jazbaat**: Darr aur lalach dono se bachein aur sabar karein.
+            • **Tajurba**: Bachpan ke halaat bari umar ke faislon par asar andaz hotay hain.
+            • **Qabu**: Apne kharche par qabu paana sab se ahem sabaq hai.
+            • **Nizam**: Mustaqil mizaji se kaam lein aur hosh mein rahein.
+
+            ## 🌎 Real-Life Example
+            Ek shakhs jo darr kar sara paisa ghar mein chupata hai aur doosra jo invest karta hai, dono ke nataij mukhtalif hotay hain.
+        """.trimIndent()
+        val totalWords = com.example.data.manager.PassageExplanationValidator.countWords(short160WordsResponse)
+        assertTrue("Total words should be between 120 and 200 words", totalWords in 120..200)
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(normalPassage, short160WordsResponse)
+        assertFalse("150-200 word total explanation for normal passage MUST FAIL", validation.isValid)
+        assertTrue("Must flag weak sections or overall depth", validation.weakSections.isNotEmpty())
+    }
+
+    @Test
+    fun `phase 2_5 - test 2 - understanding with only 2 short paragraphs FAILS for normal passage`() {
+        val normalPassage = "Financial success is not a hard science. It's a soft skill, where how you behave is more important than what you know. Two people with the same knowledge can have totally different financial outcomes based on their emotions and self-control."
+        val twoParagraphsUnderstandingResponse = """
+            ## 🧠 Asaan Samjh
+            Author yahan ye samjha raha hai ke daulat kamane ke liye sirf kitabi taleem ya technical maloomat kafi nahi hoti balki aapka rawaiyya sab se zyada ahmiyat rakhta hai. Insan ke jazbaat uske faislon par asar andaz hotay hain.
+
+            Jab tak aap apne lalach aur darr par qabu paana nahi seekhtay, aapki tamam scientific theories be-asar sabit hoti hain kyunke practical zindagi mein behavior hi sab kuch tay karta hai.
+
+            ## 💡 Main Lesson
+            Maliyat mein kamyabi ka taaluq aapki technical intelligence se zyada aapke sabar, bardasht aur discipline se hota hai.
+
+            Agar aap apne jazbaat par qabu paana nahi seekhte to duniya ka baray se bara ilm bhi aapko nuqsan aur tabahi se nahi bacha sakta kyunke ghalat faislay hamesha jazbaat ki ro mein hotay hain.
+
+            ## 🔑 Key Points
+            • **Behavior Banam Ilm**: Sirf market ka theoretical knowledge hona kafi nahi balki us knowledge par jazbaat ke baghair sakhti se amal karna aur sabar dikhana zaroori hai.
+            • **Self-Control Ki Ahmiyat**: Lalach aur khauf do aisi cheezein hain jo aqalmand tareen insan se bhi ghalat tareen financial faislay karwa sakti hain agar woh hosh kho baithay.
+            • **Musalsal Sabar**: Daulat banne ka process aahista aahista saalon par muheet hota hai, is mein jaldbazi aur raaton raat ameer banne ki koshish hamesha nuqsan deh sabit hoti hai.
+            • **Nafs Par Qabu**: Apne rozana ke ikhrajat aur show-off ki aadat ko control karna kisi bhi technical stock analysis se kahin zyada faida mand aur zaroori amal hai.
+
+            ## 🌎 Real-Life Example
+            Do dost hain jin ka naam Bilal aur Usman hai, jo ek hi software company mein bilkul barabar tankhwah par kaam shuru karte hain. Bilal har mahine salary aate hi naye model ke mehenge gadgets khareed leta hai aur display ke liye doston par fazool kharchi karta hai, jabke Usman har maah pehle apni emergency savings alag karta hai aur index fund mein baqaidgi se invest karta hai.
+
+            Paanch saal baad jab mulk mein achanak maashi bohran aata hai aur company kuch logon ko lay-off karti hai, to Bilal par qarz ka shadeed dabao aa jata hai aur woh panic mein apne zati asason ko khori ke bhao bechne par majboor ho jata hai. Doosri taraf Usman ke paas mutadid maahon ka emergency cash aur behtareen investments hoti hain jo usay mukammal itminan aur azaadi bakhshti hain.
+        """.trimIndent()
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(normalPassage, twoParagraphsUnderstandingResponse)
+        assertFalse("Understanding with only 2 short paragraphs MUST FAIL for normal passage", validation.isValid)
+        assertTrue("Asaan Samjh must be flagged in weakSections", validation.weakSections.contains(com.example.data.manager.PassageSectionType.UNDERSTANDING.displayName))
+        assertTrue("Issue must specifically mention needing at least 4 substantive paragraphs", validation.issues.any { it.contains("at least 4 substantive paragraphs") })
+    }
+
+    @Test
+    fun `phase 2_5 - test 3 - main lesson with only 20 words FAILS`() {
+        val normalPassage = "Compound interest is the eighth wonder of the world. He who understands it, earns it; he who doesn't, pays it. It compounds wealth exponentially over long periods of time."
+        val short20WordLesson = """
+            ## 🧠 Asaan Samjh
+            Author yahan compounding ke qudrati asool ko bohot wazeh aur dilchasp andaz mein samjha raha hai. Jab koi shakhs apne sarmaye ko waqt deta hai to us par milne wala munafa mazeed munafa paida karne lagta hai.
+
+            Shuru ke saalon mein ye izafa intehayi mamooli lagta hai aur aksar be-sabar log isay dekh kar mayus ho jatay hain ya apna sarmaya nikal lete hain.
+
+            Lekin asal qudrat aakhri saalon mein samne aati hai jab taraqqi ka graph achanak seedha oopar ki taraf charhta hai aur choti raqam bohot baray pahar mein badal jati hai.
+
+            Is ke bar-aks jo log qarz lete hain un par compounding ulti chalti hai aur sood dar sood unhein tabah kar deta hai.
+
+            ## 💡 Main Lesson
+            Sabar se kaam lein aur compounding ke asool ko samjhein taake aap faida utha sakein.
+
+            ## 🔑 Key Points
+            • **Waqt Ka Kamal**: Compounding ke liye sab se ahem cheez raqam nahi balki lamba waqt hai jo aap sarmaye ko dete hain.
+            • **Be-Sabri Ka Nuqsan**: Beech mein investment todna compounding ke tasalsul ko hamesha ke liye tabah kar deta hai.
+            • **Qarz Ka Khatra**: Agar qarz par compounding chalay to yeh insan ki sari daulat chheen sakti hai.
+            • **Musalsal Sabar**: Rozana ki choti bachat lambay arsay baad ghair-mamooli nateeja deti hai.
+
+            ## 🌎 Real-Life Example
+            Ek shakhs 20 saal ke liye har maah paanch hazar save karta hai aur doosra shakhs credit card par fazool kharche karta hai.
+
+            Bees saal baad pehle shakhs ke paas karoron rupay hotay hain jabke doosra shakhs sood ada karte karte thak chuka hota hai.
+        """.trimIndent()
+        val lessonWords = com.example.data.manager.PassageExplanationValidator.countWords(
+            com.example.data.manager.PassageExplanationValidator.extractSections(short20WordLesson)[com.example.data.manager.PassageSectionType.MAIN_LESSON] ?: ""
+        )
+        assertTrue("Lesson words should be ~20 words (less than 30)", lessonWords < 30)
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(normalPassage, short20WordLesson)
+        assertFalse("Main Lesson with only ~20 words MUST FAIL", validation.isValid)
+        assertTrue("Main Lesson must be flagged in weakSections", validation.weakSections.contains(com.example.data.manager.PassageSectionType.MAIN_LESSON.displayName))
+        assertTrue("Issue must state Main Lesson lacks depth", validation.issues.any { it.contains("Main Lesson lacks depth") })
+    }
+
+    @Test
+    fun `phase 2_5 - test 4 - real life example with only 30 words FAILS`() {
+        val normalPassage = "Habits are the compound interest of self-improvement. The same way that money multiplies through compound interest, the effects of your habits multiply as you repeat them."
+        val shortExampleResponse = """
+            ## 🧠 Asaan Samjh
+            Author yahan aadat aur compounding ke talluq ko khoobsoorat tareeqay se wazeh kar raha hai. Har roz ka ek chota sa behtar qadam waqt ke sath ghair mamooli farq peda kar deta hai.
+
+            Jab hum musalsal achi aadaton par amal karte hain to unka asar barhta rehta hai aur shakhsiyat mein wazeh tabdeeli aati hai jo shuru mein nazar nahi aati.
+
+            Is process mein mustaqil mizaji sab se barhi taqat hai kyunke taraqqi raat o raat nahi hoti balki rozana ke chote faislay hi mustaqbil tay karte hain.
+
+            Agar hum buri aadaton ko parwaan charhne dein to unka manfi asar bhi isi tarah compound ho kar zindagi tabah kar deta hai.
+
+            ## 💡 Main Lesson
+            Apni rozana ki choti aadaton par sanjeedgi se tawajjo dein kyunke yahi aadatain mustaqbil mein apka azeem tareen nateeja tay karti hain.
+
+            Chotay chotay faislay waqt ke sath azeem kamyabi ya nakami ki bunyad ban jatay hain is liye rozana behtar banne ki koshish karein.
+
+            ## 🔑 Key Points
+            • **Rozana Ek Percent**: Rozana thora sa behtar banne ki koshish saal ke aakhir mein 37 guna behtar natija deti hai.
+            • **System Banam Maqsad**: Sirf manzil sochnay se kuch nahi hota balki rozana ke amal ka nizam banana zaroori hai.
+            • **Musalsal Amal**: Jab aap thak jayen tab bhi chota sa amal karna tasalsul ko tootne se bachata hai.
+            • **Manfi Compounding**: Buri aadatain shuru mein maza deti hain lekin aakhir mein bohot bara nuqsan lati hain.
+
+            ## 🌎 Real-Life Example
+            Ek student rozana sirf das minute parhta hai aur doosra bilkul nahi parhta, exam ke din pehla student aaram se pass ho jata hai.
+        """.trimIndent()
+
+        val exampleWords = com.example.data.manager.PassageExplanationValidator.countWords(
+            com.example.data.manager.PassageExplanationValidator.extractSections(shortExampleResponse)[com.example.data.manager.PassageSectionType.REAL_LIFE_EXAMPLE] ?: ""
+        )
+        assertTrue("Example should be around ~30 words", exampleWords < 40)
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(normalPassage, shortExampleResponse)
+        assertFalse("Real-Life Example with only ~30 words MUST FAIL", validation.isValid)
+        assertTrue("Real-Life Example must be in weakSections", validation.weakSections.contains(com.example.data.manager.PassageSectionType.REAL_LIFE_EXAMPLE.displayName))
+        assertTrue("Issue must state Real-Life Example is too brief", validation.issues.any { it.contains("Real-Life Example is too brief") })
+    }
+
+    @Test
+    fun `phase 2_5 - test 5 - three shallow key point bullets FAIL`() {
+        val normalPassage = "The stock market is a device for transferring money from the impatient to the patient. Time in the market beats timing the market. Successful investing requires patience, discipline, and emotional stability."
+        val threeShallowBulletsResponse = """
+            ## 🧠 Asaan Samjh
+            Author yahan stock market ke sab se bunyadi asool ko bayan kar raha hai ke yahan jaldbazi karne walay hamesha nuqsan uthate hain aur sabar karne walay kamyab hotay hain.
+
+            Market rozana ke hisab se upar neechay hoti rehti hai jis se log jazbaat mein aakar ghalat faislay kar baithte hain aur apna sarmaya ganwa dete hain.
+
+            Sahi hikmat-e-amli ye hai ke behtareen companiyon ke shares khareed kar lambay arsay ke liye bhool jayen taake compounding apna kaam kar sakay.
+
+            Jo shakhs market ki timing ka andaza lagane ki koshish karta hai woh aksar ghalat sabit hota hai kyunke market ghair-mutawaqqo hoti hai.
+
+            ## 💡 Main Lesson
+            Sarmayakari mein waqt aur tahammul sab se baray hathiyar hain, jaldbazi hamesha sarmaye ke zaya hone par khatam hoti hai.
+
+            Market mein thehre rehna market ke utar charhao par satta lagane se kahin zyada munafa bakhsh aur pur-sukoon amal hai.
+
+            ## 🔑 Key Points
+            • **Point 1**: Sabar karein.
+            • **Point 2**: Market timing ghalat hai.
+            • **Point 3**: Lambay arsay tak thehrein.
+
+            ## 🌎 Real-Life Example
+            Misaal ke tor par do investor hain, ek har ghantay market dekh kar panic mein shares bech deta hai aur doosra index fund mein paisa laga kar 15 saal tak bilkul parwah nahi karta.
+
+            Pandra saal baad doosray investor ka portfolio pehle se chaar guna barh jata hai kyunke us ne compounding ko chalne diya jabke pehla shakhs brokerage aur nuqsan mein barbad ho chuka hota hai.
+        """.trimIndent()
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(normalPassage, threeShallowBulletsResponse)
+        assertFalse("Three shallow bullets MUST FAIL", validation.isValid)
+        assertTrue("Key Points must be in weakSections", validation.weakSections.contains(com.example.data.manager.PassageSectionType.KEY_POINTS.displayName))
+        assertTrue("Issue must mention under-explained key insights", validation.issues.any { it.contains("Key Insights are under-explained") })
+    }
+
+    @Test
+    fun `phase 2_5 - test 6 - properly detailed explanation passes all thresholds`() {
+        val normalPassage = "Financial success is not a hard science. It's a soft skill, where how you behave is more important than what you know. Two people with the same knowledge can have totally different financial outcomes based on their emotions and self-control."
+        val comprehensiveResponse = """
+            ## 🧠 Asaan Samjh
+            Author yahan ek bohot ahem haqeeqat bayan kar raha hai ke paison ke mamlay mein kamyabi sirf is baat par depend nahi karti ke aap ke paas kitni formal education ya degree hai. Asal cheez ye hai ke aap apne jazbaat, lalach, aur kharche ke waqt apne dimagh par kitna control rakhte hain aur mushkil halaat mein kaisa rawaiyya apnate hain.
+
+            Yani do afrad jin ke paas bilkul barabar maloomat ho, phir bhi unka financial mustaqbil bilkul mukhtalif ho sakta hai kyunke unke faislay unki zehniyat par munhasir hotay hain. Ek shakhs sabar ke saath invest karta hai aur doosra shakhs jazbaat mein aakar jaldbazi mein apna nuqsan kar baithta hai. Is liye behavior ilm se zyada ahem aur taqatwar hai.
+
+            Mazeed ye ke financial market mein sab se mushkil kaam apne andar ke khauf aur lalach ko qabu mein rakhna hota hai jab har taraf afra-tafri machi ho. Jab log panic mein bech rahe hotay hain to sirf wahi shakhs munafa kamata hai jo mustahkam rehta hai aur market ke utar-charhao ko thanday dimagh se dekhta hai.
+
+            Aakhir mein ye baat samajhna zaroori hai ke technical formulas aur spreadsheets seekhna aasan hai lekin apni rozmarrah ki khwahishat par qabu pana intehayi dushwar kaam hai. Jo shakhs apne nafs aur rawaiyye par qabu pa leta hai, woh kam aamdani ke bawajood lambay arsay mein azeem daulat jama kar leta hai.
+
+            ## 💡 Main Lesson
+            Maliyat mein kamyabi ka taaluq aapki formal degree ya technical intelligence se zyada aapke sabar, bardasht aur mustaqil mizaji se hota hai jo rozana ke faislon mein nazar aati hai. Jab aap mushkil halaat mein apne lalach aur darr par qabu paana seekh lete hain to aapka maashi mustaqbil khud-ba-khud mehfooz aur roshan ho jata hai.
+
+            Agar aap apne jazbaat par qabu paana nahi seekhte to duniya ka baray se bara ilm ya ameer tareen background bhi aapko nuqsan aur maashi tabahi se nahi bacha sakta kyunke ghalat faislay hamesha jazbaat ki andhi ro mein hotay hain. Asal kamyabi zehni zabt aur mustaqil mizaji se aati hai.
+
+            ## 🔑 Key Points
+            • **Behavior Banam Ilm**: Sirf market ka theoretical knowledge hona kafi nahi balki us knowledge par jazbaat ke baghair sakhti se amal karna aur sabar dikhana zaroori hai.
+            • **Self-Control Ki Ahmiyat**: Lalach aur khauf do aisi cheezein hain jo aqalmand tareen insan se bhi ghalat tareen financial faislay karwa sakti hain agar woh hosh kho baithay.
+            • **Musalsal Sabar**: Daulat banne ka process aahista aahista saalon par muheet hota hai, is mein jaldbazi aur raaton raat ameer banne ki koshish hamesha nuqsan deh sabit hoti hai.
+            • **Nafs Par Qabu**: Apne rozana ke ikhrajat aur show-off ki aadat ko control karna kisi bhi technical stock analysis se kahin zyada faida mand aur zaroori amal hai.
+
+            ## 🌎 Real-Life Example
+            Do dost hain jin ka naam Bilal aur Usman hai, jo ek hi software company mein bilkul barabar tankhwah par kaam shuru karte hain. Bilal har mahine salary aate hi naye model ke mehenge gadgets khareed leta hai aur display ke liye doston par fazool kharchi karta hai, jabke Usman har maah pehle apni emergency savings alag karta hai aur index fund mein baqaidgi se invest karta hai.
+
+            Paanch saal baad jab mulk mein achanak maashi bohran aata hai aur company kuch logon ko lay-off karti hai, to Bilal par qarz ka shadeed dabao aa jata hai aur woh panic mein apne zati asason ko khori ke bhao bechne par majboor ho jata hai. Doosri taraf Usman ke paas mutadid maahon ka emergency cash aur behtareen investments hoti hain jo usay mukammal itminan aur azaadi bakhshti hain.
+
+            Ye misaal saaf zahir karti hai ke dono ke paas barabar ki education aur tankhwah thi, lekin Usman ke sabar aamiz rawaiyye ne usay kamyab banaya jabke Bilal ki jazbati kharchon ki aadat ne usay qarz ke daldal mein dhakail diya.
+        """.trimIndent()
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(normalPassage, comprehensiveResponse)
+        assertTrue("Comprehensive detailed response must pass validation: ${validation.issues}", validation.isValid)
+        assertTrue("No missing sections", validation.missingSections.isEmpty())
+        assertTrue("No weak sections", validation.weakSections.isEmpty())
+        assertTrue("No blocking violations", validation.blockingViolations.isEmpty())
+        assertEquals(0, validation.defectScore)
+    }
+
+    @Test
+    fun `phase 2_5 - test 7 - tiny passage still passes with reduced adaptive thresholds`() {
+        val tinyPassage = "Knowledge is power."
+        val conciseResponse = """
+            ## 🧠 Asaan Samjh
+            Author yahan ye samjha raha hai ke sahi maloomat aur ilm insan ko zindagi mein behtareen faislay lene ki taqat deta hai.
+
+            ## 💡 Main Lesson
+            Ilm insan ko azaad aur mustahkam banata hai taake woh gumrahi se bach sakay.
+
+            ## 🔑 Key Points
+            • **Taqat Ka Zariya**: Ilm se insan sahi aur ghalat mein tameez kar sakta hai.
+            • **Behtar Faislay**: Maloomat ki roshni mein kiye gaye faislay kamyabi ki taraf le jaate hain.
+
+            ## 🌎 Real-Life Example
+            Ek student jo parhai ke asool achi tarah samajhta hai woh exam hall mein pur-aitamad rehta hai aur behtareen number haasil karta hai.
+        """.trimIndent()
+
+        val validation = com.example.data.manager.PassageExplanationValidator.validate(tinyPassage, conciseResponse)
+        assertTrue("Tiny passage explanation must pass with reduced thresholds: ${validation.issues}", validation.isValid)
+        assertTrue("isShortPassage flag should be true", validation.isShortPassage)
+        assertEquals(com.example.data.manager.PassageLengthBand.TINY, validation.passageBand)
+    }
+
+    @Test
+    fun `phase 2_5 - test 8 - latest 5 context still contains only 5 turns`() {
+        val history = (1..8).map { i ->
+            com.example.data.local.database.entity.ChapterMessage(
+                id = i.toLong(),
+                chapterId = 1L,
+                originalText = "Original English passage number $i.",
+                aiResponse = """
+                    ## 🧠 Asaan Samjh
+                    Understanding content for passage $i.
+                    
+                    ## 💡 Main Lesson
+                    Lesson for passage $i.
+                    
+                    ## 🔑 Key Points
+                    • **Point $i**: Insight for passage $i.
+                    
+                    ## 🌎 Real-Life Example
+                    Example for passage $i.
+                """.trimIndent()
+            )
+        }
+
+        val rendered = com.example.data.manager.HistoricalContextManager.buildRecentContext(history)
+        // Passages 1, 2, 3 must be excluded; Passages 4, 5, 6, 7, 8 must be present
+        assertFalse("Passage #1 must not be included", rendered.contains("passage number 1."))
+        assertFalse("Passage #2 must not be included", rendered.contains("passage number 2."))
+        assertFalse("Passage #3 must not be included", rendered.contains("passage number 3."))
+        assertTrue("Passage #4 must be included", rendered.contains("passage number 4."))
+        assertTrue("Passage #8 must be included", rendered.contains("passage number 8."))
+        assertTrue("Must contain Previous Passage #1 header", rendered.contains("Previous Passage #1:"))
+        assertTrue("Must contain Previous Passage #5 header", rendered.contains("Previous Passage #5:"))
+        assertFalse("Must not contain Previous Passage #6 header", rendered.contains("Previous Passage #6:"))
+    }
+
+    @Test
+    fun `phase 2_5 - test 9 - expanded context preserves substantially more content than before`() {
+        val longUnderstanding = "A".repeat(1500)
+        val longLesson = "B".repeat(900)
+        val longKeyInsights = "• **Point**: " + "C".repeat(1100)
+        val longExample = "D".repeat(1100)
+        val longSource = "E".repeat(800)
+
+        val singleMessage = com.example.data.local.database.entity.ChapterMessage(
+            id = 1L,
+            chapterId = 1L,
+            originalText = longSource,
+            aiResponse = """
+                ## 🧠 Asaan Samjh
+                $longUnderstanding
+                
+                ## 💡 Main Lesson
+                $longLesson
+                
+                ## 🔑 Key Points
+                $longKeyInsights
+                
+                ## 🌎 Real-Life Example
+                $longExample
+            """.trimIndent()
+        )
+
+        val rendered = com.example.data.manager.HistoricalContextManager.buildRecentContext(listOf(singleMessage))
+        assertTrue("Rendered understanding must preserve > 1000 characters (more than old 800 char cap)",
+            rendered.contains("A".repeat(1400)))
+        assertTrue("Rendered main lesson must preserve > 500 characters (more than old 400 char cap)",
+            rendered.contains("B".repeat(800)))
+        assertTrue("Rendered key insights must preserve > 700 characters (more than old 500 char cap)",
+            rendered.contains("C".repeat(1000)))
+        assertTrue("Rendered example must preserve > 700 characters (more than old 500 char cap)",
+            rendered.contains("D".repeat(1000)))
+        assertTrue("Rendered source must preserve > 600 characters (more than old 500 char cap)",
+            rendered.contains("E".repeat(750)))
+    }
+
+    @Test
+    fun `phase 2_5 - test 10 - total historical context remains bounded within global budget`() {
+        val massiveMessages = (1..5).map { i ->
+            com.example.data.local.database.entity.ChapterMessage(
+                id = i.toLong(),
+                chapterId = 1L,
+                originalText = "Source excerpt $i: " + "S".repeat(1000),
+                aiResponse = """
+                    ## 🧠 Asaan Samjh
+                    ${"U$i ".repeat(500)}
+                    
+                    ## 💡 Main Lesson
+                    ${"L$i ".repeat(250)}
+                    
+                    ## 🔑 Key Points
+                    • **Point 1**: ${"K$i ".repeat(300)}
+                    
+                    ## 🌎 Real-Life Example
+                    ${"E$i ".repeat(300)}
+                """.trimIndent()
+            )
+        }
+
+        val rendered = com.example.data.manager.HistoricalContextManager.buildRecentContext(massiveMessages)
+        assertTrue("Rendered historical context must be bounded by global budget (16000 chars)",
+            rendered.length <= com.example.data.manager.HistoricalContextManager.GLOBAL_CONTEXT_BUDGET_CHARS)
+
+        assertTrue("Newest turn content must be preserved", rendered.contains("U5 "))
+    }
+
+    @Test
+    fun `phase 2_5 - test 11 - current passage is never truncated because of history`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val storage = com.example.data.local.security.AndroidKeystoreApiKeyStorage(context)
+        val geminiRepo = com.example.data.repository.GeminiRepository(storage)
+
+        val massiveHistory = (1..10).map { i ->
+            com.example.data.local.database.entity.ChapterMessage(
+                id = i.toLong(),
+                chapterId = 1L,
+                originalText = "History $i: " + "H".repeat(800),
+                aiResponse = "## 🧠 Asaan Samjh\n" + "Response $i: " + "R".repeat(1500)
+            )
+        }
+
+        val currentPassage = "CURRENT_PASSAGE_EXACT_TOKEN_" + "P".repeat(2000)
+        val prompt = geminiRepo.buildPassageUserPrompt(
+            passage = currentPassage,
+            conversationHistory = massiveHistory
+        )
+
+        assertTrue("Current passage must NEVER be truncated and must be present verbatim in the prompt",
+            prompt.contains(currentPassage))
+        assertTrue("Prompt must explicitly state CURRENT PASSAGE ALWAYS WINS",
+            prompt.contains("CURRENT PASSAGE ALWAYS WINS"))
+    }
+
+    @Test
+    fun `phase 2_5 - test 12 - multi-page combined snippet pipeline continues passing unchanged`() {
+        val snippetPart1 = "In the short run, the market is a voting machine but in the long run,"
+        val snippetPart2 = "it is a weighing machine. The ability to endure volatility is an edge."
+        val combined = com.example.data.ocr.TextMergeUtils.combineSnippets(listOf(snippetPart1, snippetPart2))
+
+        assertEquals("In the short run, the market is a voting machine but in the long run, it is a weighing machine. The ability to endure volatility is an edge.", combined)
+
+        val multiPagePassage = "[Page 12, 13]\n$combined"
+        val sanitized = com.example.ui.components.chat.PassageSanitizer.sanitizeSnippet(multiPagePassage)
+        assertEquals(12, sanitized.pageNumber)
+        assertEquals("12, 13", sanitized.pageDisplayLabel)
+        assertEquals("ORIGINAL PASSAGE • PAGES 12, 13", sanitized.pageLabel)
+        assertEquals(combined, sanitized.cleanText)
     }
 }
 

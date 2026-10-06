@@ -58,4 +58,24 @@ class GeminiKeyRotationManager(
             )
         }
     }
+
+    /**
+     * Executes a Flash-Lite Multimodal Vision request for OCR through the
+     * VISION_EXTRACTION lane with ApiKeyManager multi-key rotation and Flash-Lite model cascade.
+     */
+    suspend fun executeFlashLiteVisionRequest(
+        request: GeminiGenerateContentRequest,
+        operationName: String = "Flash-Lite document page OCR"
+    ): Result<GeminiGenerateContentResponse> = withContext(ioDispatcher) {
+        apiKeyManager.executeWithAutoRotation(
+            taskType = GeminiTaskType.VISION_EXTRACTION,
+            operationName = operationName
+        ) { apiKey, model ->
+            apiService.generateContent(
+                model = model,
+                apiKey = apiKey,
+                request = request.sanitizedForModel(model)
+            )
+        }
+    }
 }

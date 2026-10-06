@@ -952,10 +952,11 @@ private fun ChapterTimelineEntryCard(
                         )
                     }
 
-                    if (parsedEntry.pageNumber != null) {
+                    val displayPage = parsedEntry.pageDisplayLabel ?: parsedEntry.pageNumber?.toString()
+                    if (!displayPage.isNullOrBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Page ${parsedEntry.pageNumber}",
+                            text = if (displayPage.contains(",") || displayPage.contains("-")) "Pages $displayPage" else "Page $displayPage",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFFA1A1AA)

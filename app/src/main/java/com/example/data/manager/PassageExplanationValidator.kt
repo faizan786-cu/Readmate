@@ -7,9 +7,16 @@ enum class PassageSectionType(val displayName: String) {
     REAL_LIFE_EXAMPLE("Real-Life Example")
 }
 
+enum class PassageLengthBand {
+    TINY,   // < 25 words (short quotes, aphorisms, 1-line passages)
+    NORMAL, // 25..120 words (standard book snippets)
+    LONG    // > 120 words (long multi-paragraph or multi-page snippets)
+}
+
 data class QualityValidationResult(
     val isValid: Boolean,
     val isShortPassage: Boolean,
+    val passageBand: PassageLengthBand = if (isShortPassage) PassageLengthBand.TINY else PassageLengthBand.NORMAL,
     val missingSections: List<String>,
     val weakSections: List<String>,
     val issues: List<String>,
@@ -18,7 +25,7 @@ data class QualityValidationResult(
     val bulletCount: Int = 0
 ) {
     val defectScore: Int
-        get() = (missingSections.size * 10) + (blockingViolations.size * 6) + (weakSections.size * 3)
+        get() = (missingSections.size * 15) + (blockingViolations.size * 6) + (weakSections.size * 3)
 
     fun generateRepairInstructions(): String {
         val sb = StringBuilder()
@@ -47,10 +54,19 @@ data class QualityValidationResult(
 object PassageExplanationValidator {
 
     private const val SHORT_PASSAGE_WORD_THRESHOLD = 25
+    private const val LONG_PASSAGE_WORD_THRESHOLD = 120
+
+    fun getPassageBand(passage: String): PassageLengthBand {
+        val words = countWords(passage)
+        return when {
+            words < SHORT_PASSAGE_WORD_THRESHOLD -> PassageLengthBand.TINY
+            words <= LONG_PASSAGE_WORD_THRESHOLD -> PassageLengthBand.NORMAL
+            else -> PassageLengthBand.LONG
+        }
+    }
 
     fun isShortPassage(passage: String): Boolean {
-        val words = passage.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-        return words.size < SHORT_PASSAGE_WORD_THRESHOLD
+        return getPassageBand(passage) == PassageLengthBand.TINY
     }
 
     fun isMeaningfullyBetter(
@@ -63,22 +79,32 @@ object PassageExplanationValidator {
         // If initial is already valid (defensive guard, repair not needed)
         if (initial.isValid) return false
 
-        // 2. If repair is still invalid: compare initial validation vs repaired validation using quality defects, NOT string length
-        // Defect score penalizes: missing sections (10), blocking violations (6), weak sections (3)
+        // A repair that has more missing sections than the initial draft is a structural regression
+        if (repaired.missingSections.size > initial.missingSections.size) return false
+
+        // 2. If repair is still invalid: compare initial validation vs repaired validation using quality defects
+        // Defect score penalizes: missing sections (15), blocking violations (6), weak sections (3)
         // Accept repaired response ONLY if it is meaningfully better (strictly lower defect penalty score)
         return repaired.defectScore < initial.defectScore
     }
 
     fun validate(passage: String, response: String): QualityValidationResult {
         val trimmedResponse = response.trim()
-        val shortPassage = isShortPassage(passage)
+        val band = getPassageBand(passage)
+        val shortPassage = band == PassageLengthBand.TINY
 
         if (trimmedResponse.isBlank()) {
             val emptyIssues = listOf("Response is completely empty.")
             return QualityValidationResult(
                 isValid = false,
                 isShortPassage = shortPassage,
-                missingSections = listOf("Understanding / Asaan Samjh", "Core Takeaway / Main Lesson", "Key Insights / Key Points", "Real-Life Example"),
+                passageBand = band,
+                missingSections = listOf(
+                    PassageSectionType.UNDERSTANDING.displayName,
+                    PassageSectionType.MAIN_LESSON.displayName,
+                    PassageSectionType.KEY_POINTS.displayName,
+                    PassageSectionType.REAL_LIFE_EXAMPLE.displayName
+                ),
                 weakSections = emptyList(),
                 issues = emptyIssues,
                 blockingViolations = emptyIssues
@@ -101,18 +127,36 @@ object PassageExplanationValidator {
             val sentences = countSentences(understanding)
             val paragraphs = countParagraphs(understanding)
 
-            if (!shortPassage) {
-                if (sentences <= 1 && words < 40) {
-                    weak.add(PassageSectionType.UNDERSTANDING.displayName)
-                    issues.add("Understanding section is only one short sentence ($words words); should provide deeper explanation of the passage.")
-                } else if (paragraphs < 2 && words < 45) {
-                    weak.add(PassageSectionType.UNDERSTANDING.displayName)
-                    issues.add("Understanding section lacks depth ($words words, $paragraphs paragraph(s)); should contain at least 2 useful paragraphs or equivalent detail.")
+            when (band) {
+                PassageLengthBand.TINY -> {
+                    if (words < 12 || sentences < 1) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh is too short ($words words); provide at least one clear explanatory explanation.")
+                    }
                 }
-            } else {
-                if (words < 12 && sentences <= 1) {
-                    weak.add(PassageSectionType.UNDERSTANDING.displayName)
-                    issues.add("Understanding section is too brief for this passage.")
+                PassageLengthBand.NORMAL -> {
+                    if (paragraphs < 4) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh is too short: expand step-by-step explanation into at least 4 substantive paragraphs ($paragraphs paragraph(s) provided).")
+                    } else if (words < 180) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh is too short: expand step-by-step explanation ($words words, minimum ~180-250 words).")
+                    } else if (sentences < 5) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh contains short fragments or too few sentences ($sentences sentence(s)); provide multiple explanatory sentences.")
+                    }
+                }
+                PassageLengthBand.LONG -> {
+                    if (paragraphs < 4) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh is too short for a long/complex passage: expand into at least 4-5 substantive paragraphs ($paragraphs paragraph(s) provided).")
+                    } else if (words < 240) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh lacks depth for a long/complex passage ($words words, minimum 240 words).")
+                    } else if (sentences < 6) {
+                        weak.add(PassageSectionType.UNDERSTANDING.displayName)
+                        issues.add("Asaan Samjh contains too few explanatory sentences for this passage ($sentences sentences).")
+                    }
                 }
             }
         }
@@ -124,15 +168,32 @@ object PassageExplanationValidator {
             issues.add("Missing '${PassageSectionType.MAIN_LESSON.displayName}' section.")
         } else {
             val words = countWords(mainLesson)
-            if (!shortPassage) {
-                if (words < 16) {
-                    weak.add(PassageSectionType.MAIN_LESSON.displayName)
-                    issues.add("Main Lesson is too brief or vague ($words words); should clearly articulate the central lesson.")
+            val paragraphs = countParagraphs(mainLesson)
+
+            when (band) {
+                PassageLengthBand.TINY -> {
+                    if (words < 6) {
+                        weak.add(PassageSectionType.MAIN_LESSON.displayName)
+                        issues.add("Main Lesson is too brief ($words words).")
+                    }
                 }
-            } else {
-                if (words < 8) {
-                    weak.add(PassageSectionType.MAIN_LESSON.displayName)
-                    issues.add("Main Lesson is too brief ($words words).")
+                PassageLengthBand.NORMAL -> {
+                    if (words < 80) {
+                        weak.add(PassageSectionType.MAIN_LESSON.displayName)
+                        issues.add("Main Lesson lacks depth: explain why the lesson matters ($words words, minimum ~80-120 words).")
+                    } else if (paragraphs < 2) {
+                        weak.add(PassageSectionType.MAIN_LESSON.displayName)
+                        issues.add("Main Lesson lacks depth: explain the core takeaway across at least 2 meaningful paragraphs ($paragraphs paragraph(s) provided).")
+                    }
+                }
+                PassageLengthBand.LONG -> {
+                    if (words < 90) {
+                        weak.add(PassageSectionType.MAIN_LESSON.displayName)
+                        issues.add("Main Lesson lacks depth for complex passage ($words words, minimum 90-120 words).")
+                    } else if (paragraphs < 2) {
+                        weak.add(PassageSectionType.MAIN_LESSON.displayName)
+                        issues.add("Main Lesson lacks depth: explain across at least 2 meaningful paragraphs.")
+                    }
                 }
             }
         }
@@ -147,32 +208,34 @@ object PassageExplanationValidator {
             val bullets = extractBullets(keyPoints)
             totalBullets = bullets.size
 
-            if (!shortPassage) {
-                if (bullets.size < 3) {
-                    weak.add(PassageSectionType.KEY_POINTS.displayName)
-                    issues.add("Key Points contains only ${bullets.size} point(s); should normally contain at least 3 distinct insights.")
-                } else {
-                    val shallowCount = bullets.count { isShallowBullet(it) }
-                    if (shallowCount > 1 || (bullets.size == 3 && shallowCount >= 2)) {
+            when (band) {
+                PassageLengthBand.TINY -> {
+                    if (bullets.isEmpty()) {
                         weak.add(PassageSectionType.KEY_POINTS.displayName)
-                        issues.add("Key Points contains shallow one-word or one-clause bullet points ($shallowCount shallow).")
+                        issues.add("Key Points section has no bullet points.")
+                    } else if (bullets.size > 8) {
+                        val violation = "Key Points contains too many bullets (${bullets.size}); exceeds maximum allowed limit of 8."
+                        blockingViolations.add(violation)
+                        issues.add(violation)
                     }
                 }
+                PassageLengthBand.NORMAL, PassageLengthBand.LONG -> {
+                    if (bullets.size < 4) {
+                        weak.add(PassageSectionType.KEY_POINTS.displayName)
+                        issues.add("Key Insights are under-explained: provide at least 4 distinct insights (currently ${bullets.size} point(s)).")
+                    } else {
+                        val shallowBullets = bullets.filter { isShallowBullet(it) }
+                        if (shallowBullets.isNotEmpty()) {
+                            weak.add(PassageSectionType.KEY_POINTS.displayName)
+                            issues.add("Key Insights are under-explained: headline-only bullets without explanation must be expanded (each point must contain actual explanation >= 20 words; ${shallowBullets.size} shallow point(s) found).")
+                        }
+                    }
 
-                // Guardrail against bloated bullet lists (>8 bullets is invalid)
-                if (bullets.size > 8) {
-                    val violation = "Key Points contains too many bullets (${bullets.size}); exceeds maximum allowed limit of 8."
-                    blockingViolations.add(violation)
-                    issues.add(violation)
-                }
-            } else {
-                if (bullets.isEmpty()) {
-                    weak.add(PassageSectionType.KEY_POINTS.displayName)
-                    issues.add("Key Points section has no bullet points.")
-                } else if (bullets.size > 8) {
-                    val violation = "Key Points contains too many bullets (${bullets.size}); exceeds maximum allowed limit of 8."
-                    blockingViolations.add(violation)
-                    issues.add(violation)
+                    if (bullets.size > 8) {
+                        val violation = "Key Points contains too many bullets (${bullets.size}); exceeds maximum allowed limit of 8."
+                        blockingViolations.add(violation)
+                        issues.add(violation)
+                    }
                 }
             }
         }
@@ -185,21 +248,63 @@ object PassageExplanationValidator {
         } else {
             val words = countWords(example)
             val sentences = countSentences(example)
+            val paragraphs = countParagraphs(example)
 
-            if (!shortPassage) {
-                if (words < 22 || (sentences <= 1 && words < 32)) {
-                    weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
-                    issues.add("Real-Life Example is only one generic sentence ($words words); should present an actual relatable scenario.")
+            when (band) {
+                PassageLengthBand.TINY -> {
+                    if (words < 15) {
+                        weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
+                        issues.add("Real-Life Example is too brief ($words words).")
+                    }
                 }
-            } else {
-                if (words < 10) {
-                    weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
-                    issues.add("Real-Life Example is too brief ($words words).")
+                PassageLengthBand.NORMAL -> {
+                    if (words < 120) {
+                        weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
+                        issues.add("Real-Life Example is too brief: provide a full realistic scenario with situation, action/decision, outcome, and explicit link back to the passage ($words words, minimum ~120-180 words).")
+                    } else if (paragraphs < 2) {
+                        weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
+                        issues.add("Real-Life Example lacks depth: provide across at least 2-3 meaningful paragraphs ($paragraphs paragraph(s) provided).")
+                    } else if (sentences < 3) {
+                        weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
+                        issues.add("Real-Life Example contains too few sentences to establish situation, action, and outcome ($sentences sentence(s)).")
+                    }
+                }
+                PassageLengthBand.LONG -> {
+                    if (words < 140) {
+                        weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
+                        issues.add("Real-Life Example is too brief for a complex passage ($words words, minimum 140 words).")
+                    } else if (paragraphs < 2) {
+                        weak.add(PassageSectionType.REAL_LIFE_EXAMPLE.displayName)
+                        issues.add("Real-Life Example lacks depth: provide across at least 2-3 meaningful paragraphs.")
+                    }
                 }
             }
         }
 
-        // 5. Guardrail against verbatim repetition of original passage
+        // 5. Overall Underdevelopment check (scaled adaptively)
+        val totalWords = countWords(trimmedResponse)
+        when (band) {
+            PassageLengthBand.TINY -> {
+                if (totalWords < 45) {
+                    weak.add("Overall Explanation Depth")
+                    issues.add("Total response is underdeveloped for this passage ($totalWords words).")
+                }
+            }
+            PassageLengthBand.NORMAL -> {
+                if (totalWords < 480) {
+                    weak.add("Overall Explanation Depth")
+                    issues.add("Total response is underdeveloped ($totalWords words; minimum ~500 words for normal passages).")
+                }
+            }
+            PassageLengthBand.LONG -> {
+                if (totalWords < 550) {
+                    weak.add("Overall Explanation Depth")
+                    issues.add("Total response lacks depth for a long/complex passage ($totalWords words; minimum 550-600 words).")
+                }
+            }
+        }
+
+        // 6. Guardrail against verbatim repetition of original passage
         val normalizedPassage = passage.replace(Regex("\\s+"), " ").trim()
         val normalizedResponse = trimmedResponse.replace(Regex("\\s+"), " ").trim()
         if (normalizedPassage.length >= 30 && normalizedResponse.contains(normalizedPassage, ignoreCase = true)) {
@@ -213,6 +318,7 @@ object PassageExplanationValidator {
         return QualityValidationResult(
             isValid = isValid,
             isShortPassage = shortPassage,
+            passageBand = band,
             missingSections = missing,
             weakSections = weak,
             issues = issues,
@@ -314,15 +420,16 @@ object PassageExplanationValidator {
         return bullets
     }
 
-    private fun isShallowBullet(bullet: String): Boolean {
-        // Remove bold titles like **Title**:
+    fun isShallowBullet(bullet: String): Boolean {
+        // Strip bold label, e.g., "**Behavior Banam Ilm**:" or "**Point 1**:"
         val content = bullet
             .replace(Regex("^\\*\\*[^\\*]+\\*\\*[:\\-]?\\s*"), "")
             .replace(Regex("^[^:\\-]+[:\\-]\\s*"), "")
             .trim()
         val contentWords = countWords(content)
         val totalWords = countWords(bullet)
-        return contentWords < 4 || totalWords < 6
+        // A substantive bullet has explanation, not just a headline or short phrase
+        return contentWords < 14 || totalWords < 18
     }
 
     fun countWords(text: String): Int {

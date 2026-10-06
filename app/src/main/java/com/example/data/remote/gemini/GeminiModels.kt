@@ -24,7 +24,7 @@ data class GeminiGenerationConfig(
          * to prioritize instant streaming responsiveness.
          */
         fun forFlash(
-            maxOutputTokens: Int = 2500,
+            maxOutputTokens: Int = 4500,
             temperature: Float? = 0.35f,
             responseMimeType: String? = null
         ): GeminiGenerationConfig = GeminiGenerationConfig(

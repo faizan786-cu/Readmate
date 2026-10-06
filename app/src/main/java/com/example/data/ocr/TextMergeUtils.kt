@@ -60,15 +60,21 @@ object TextMergeUtils {
 
     /**
      * Merges Part 1 (from previous page) and Part 2 (from next page).
-     * Handles hyphenated word boundaries (e.g., "fundamen-" + "tals" -> "fundamentals")
+     * Handles hyphenated word boundaries (e.g., "fundamen-" + "tals" -> "fundamentals"),
+     * ellipsis continuations (e.g., "because..." + "...they" -> "because... they"),
      * and normalizes spacing.
      */
     fun mergeMultiPagePassages(part1: String, part2: String): String {
         val clean1 = sanitizeOcrText(part1).trim()
-        val clean2 = sanitizeOcrText(part2).trim()
+        var clean2 = sanitizeOcrText(part2).trim()
 
         if (clean1.isEmpty()) return clean2
         if (clean2.isEmpty()) return clean1
+
+        // Handle ellipsis continuation between pages: "because..." + "...they" -> "because... they"
+        if ((clean1.endsWith("...") || clean1.endsWith("…")) && (clean2.startsWith("...") || clean2.startsWith("…"))) {
+            clean2 = clean2.replaceFirst(Regex("^(\\.\\.\\.|…)\\s*"), "")
+        }
 
         // Check if Part 1 ends with a hyphen
         if (clean1.endsWith("-")) {
@@ -86,6 +92,20 @@ object TextMergeUtils {
 
         // Standard merge with single space
         return "$clean1 $clean2".trim()
+    }
+
+    /**
+     * Combines an ordered list of snipped text fragments across multiple physical pages
+     * into a single unified passage, safely normalizing boundaries.
+     */
+    fun combineSnippets(snippets: List<String>): String {
+        val valid = snippets.map { it.trim() }.filter { it.isNotEmpty() }
+        if (valid.isEmpty()) return ""
+        var result = valid.first()
+        for (i in 1 until valid.size) {
+            result = mergeMultiPagePassages(result, valid[i])
+        }
+        return result
     }
 
     fun cleanWhitespace(text: String): String {

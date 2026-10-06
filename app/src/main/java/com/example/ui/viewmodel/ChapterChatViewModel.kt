@@ -252,6 +252,9 @@ class ChapterChatViewModel(
     var part1CapturedText by mutableStateOf<String?>(null)
         private set
 
+    var part1PageIndex by mutableIntStateOf(0)
+        private set
+
     var part1WordCount by mutableIntStateOf(0)
         private set
 
@@ -488,6 +491,7 @@ class ChapterChatViewModel(
 
             visionResult.onSuccess { text ->
                 part1CapturedText = text
+                part1PageIndex = pageIndex
                 part1WordCount = TextMergeUtils.countWords(text)
                 // isSnipModeActive stays true for Step 2!
             }.onFailure { error ->
@@ -552,7 +556,8 @@ class ChapterChatViewModel(
             chapterTitle = currentChapterTitle,
             authorName = currentAuthor,
             bookId = currentBookId,
-            chapterNumber = currentChapNum
+            chapterNumber = currentChapNum,
+            part1PageIndex = part1PageIndex
         )
     }
 

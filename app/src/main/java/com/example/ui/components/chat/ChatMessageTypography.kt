@@ -56,6 +56,7 @@ data class SanitizedPassageInfo(
     val cleanText: String,
     val pageLabel: String,
     val pageNumber: Int? = null,
+    val pageDisplayLabel: String? = null,
     val heading: String? = null,
     val bodyText: String = cleanText
 )
@@ -72,7 +73,7 @@ object PassageSanitizer {
      * - Rejoins hyphenated word breaks (e.g. "dis-\ncover" -> "discover", "infor- mation" -> "information")
      * - Removes OCR noise characters, stray pipe characters, unparsed markdown symbols (###, **, __)
      * - Merges single-line hard line wraps inside sentences while preserving paragraph breaks
-     * - Detects and formats page annotations (e.g., "[Page 42]" -> pageLabel "ORIGINAL PASSAGE • PAGE 42")
+     * - Detects and formats page annotations (e.g., "[Page 42]" -> pageLabel "ORIGINAL PASSAGE • PAGE 42", "[Page 1, 2]" -> "ORIGINAL PASSAGE • PAGES 1, 2")
      */
     fun sanitizeSnippet(rawText: String): SanitizedPassageInfo {
         if (rawText.isBlank()) {
@@ -81,14 +82,28 @@ object PassageSanitizer {
 
         var text = rawText.trim()
 
-        // 1. Detect and extract page number if present in markers like [Page 12], [Pages 12-13], (Page 12), Page 12:, Pg. 12, p. 12, etc.
+        // 1. Detect and extract page number(s) if present in markers like [Page 12], [Page 1, 2], [Pages 12-13], (Page 12), etc.
         var extractedPage: Int? = null
-        val pageRegex = Regex("(?i)(?:\\[|\\(|\\b)(?:Pages?|Pg\\.?|p\\.)\\s*(\\d+)(?:\\]|\\)|:|\\s*[-—])?")
-        val pageMatch = pageRegex.find(text)
-        if (pageMatch != null) {
-            extractedPage = pageMatch.groupValues[1].toIntOrNull()
-            // Remove the raw page header prefix if it appears at the start of the snippet
-            text = text.replaceFirst(pageRegex, "").trim()
+        var extractedPagesLabel: String? = null
+
+        val bracketedPageRegex = Regex("(?i)^\\[\\s*(?:Pages?|Pg\\.?|p\\.)\\s*([\\d\\s,–—-]+)\\][:\\s]*\\r?\\n*")
+        val bracketMatch = bracketedPageRegex.find(text)
+        if (bracketMatch != null) {
+            val rawPages = bracketMatch.groupValues[1].trim()
+            val firstDigit = Regex("\\d+").find(rawPages)?.value?.toIntOrNull()
+            extractedPage = firstDigit
+            extractedPagesLabel = rawPages.replace(Regex("\\s+"), " ")
+            text = text.substring(bracketMatch.range.last + 1).trim()
+        } else {
+            val generalPageRegex = Regex("(?i)(?:\\[|\\(|\\b)(?:Pages?|Pg\\.?|p\\.)\\s*([\\d\\s,–—-]+)(?:\\]|\\)|:|\\s*[-—])?")
+            val pageMatch = generalPageRegex.find(text)
+            if (pageMatch != null) {
+                val rawPages = pageMatch.groupValues[1].trim()
+                val firstDigit = Regex("\\d+").find(rawPages)?.value?.toIntOrNull()
+                extractedPage = firstDigit
+                extractedPagesLabel = rawPages.replace(Regex("\\s+"), " ")
+                text = text.replaceFirst(generalPageRegex, "").trim()
+            }
         }
 
         // 2. Remove markdown header tokens and preamble at the start (e.g. "### ## 📖 Original English Passage:", "## Excerpt")
@@ -135,7 +150,13 @@ object PassageSanitizer {
                 .trim()
         }.filter { it.isNotBlank() }
 
-        val label = if (extractedPage != null) {
+        val label = if (!extractedPagesLabel.isNullOrBlank()) {
+            if (extractedPagesLabel.contains(",") || extractedPagesLabel.contains("-") || extractedPagesLabel.contains("–") || extractedPagesLabel.contains("—")) {
+                "ORIGINAL PASSAGE • PAGES $extractedPagesLabel"
+            } else {
+                "ORIGINAL PASSAGE • PAGE $extractedPagesLabel"
+            }
+        } else if (extractedPage != null) {
             "ORIGINAL PASSAGE • PAGE $extractedPage"
         } else {
             "ORIGINAL PASSAGE"
@@ -165,6 +186,7 @@ object PassageSanitizer {
             cleanText = cleanText,
             pageLabel = label,
             pageNumber = extractedPage,
+            pageDisplayLabel = extractedPagesLabel ?: extractedPage?.toString(),
             heading = heading,
             bodyText = bodyText
         )

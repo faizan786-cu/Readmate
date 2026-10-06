@@ -9,6 +9,7 @@ import com.example.ui.components.chat.PassageSanitizer
 data class AnalyzedEntryData(
     val heading: String,
     val pageNumber: Int? = null,
+    val pageDisplayLabel: String? = null,
     val understandingParagraphs: List<String>,
     val quote: String,
     val quoteExplanation: String = "",
@@ -166,6 +167,7 @@ object ChapterAnalysisParser {
         return AnalyzedEntryData(
             heading = heading,
             pageNumber = pageNum,
+            pageDisplayLabel = sanitized.pageDisplayLabel ?: pageNum?.toString(),
             understandingParagraphs = if (understandingParas.isNotEmpty()) understandingParas else listOf(stripMarkdownAsterisks(understandingRaw)),
             quote = quotePair.first,
             quoteExplanation = quoteUrduExplanation,
